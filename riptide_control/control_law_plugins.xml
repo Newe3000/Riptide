@@ -1,0 +1,12 @@
+<library path="riptide_control">
+  <class
+    name="riptide_control/TaskSpaceImpedance"
+    type="riptide_control::TaskSpaceImpedance"
+    base_class_type="riptide::IControlLaw">
+    <description>
+      Operational-space (Cartesian impedance) control law: world-frame EE pose
+      error -> task wrench -> joint torque (J^T), with a nullspace posture task.
+      Because the EE pose uses the measured base pose, base motion is rejected.
+    </description>
+  </class>
+</library>

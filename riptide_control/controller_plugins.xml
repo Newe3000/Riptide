@@ -9,4 +9,14 @@
       stack and the simplest end-to-end demonstration of torque control.
     </description>
   </class>
+  <class
+    name="riptide_control/EeStabilizationController"
+    type="riptide_control::EeStabilizationController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Task-space EE-stabilization controller: reads the arm joints + floating-base
+      sensor, assembles a RobotState, and delegates to a swappable IControlLaw
+      plugin (Pinocchio-backed dynamics). Rejects base disturbances at the EE.
+    </description>
+  </class>
 </library>

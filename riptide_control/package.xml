@@ -19,9 +19,10 @@
   <depend>riptide_dynamics</depend>
   <depend>pluginlib</depend>
 
-  <!-- Controller plugin (JointPdController) -->
+  <!-- Controller plugins (JointPdController, EeStabilizationController) -->
   <depend>controller_interface</depend>
   <depend>hardware_interface</depend>
+  <depend>ament_index_cpp</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

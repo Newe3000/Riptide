@@ -6,6 +6,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -13,22 +14,35 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+# Pinocchio prefix (needed transitively via riptide_dynamics).
+if(NOT DEFINED PINOCCHIO_ROOT)
+  if(DEFINED ENV{PINOCCHIO_ROOT})
+    set(PINOCCHIO_ROOT $ENV{PINOCCHIO_ROOT})
+  else()
+    set(PINOCCHIO_ROOT "$ENV{HOME}/.local/pinocchio")
+  endif()
+endif()
+list(APPEND CMAKE_PREFIX_PATH "${PINOCCHIO_ROOT}")
 find_package(riptide_dynamics REQUIRED)
 
-# Controller library (currently: JointPdController). The IControlLaw plugins
-# (PID/impedance/LQR/MPC) and the EeStabilizationController are added here later.
 add_library(riptide_control SHARED
-  src/joint_pd_controller.cpp)
+  src/joint_pd_controller.cpp
+  src/ee_stabilization_controller.cpp
+  src/task_space_impedance.cpp)
 target_include_directories(riptide_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(riptide_control Eigen3::Eigen)
 ament_target_dependencies(riptide_control
-  controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
-  riptide_dynamics)
+  ament_index_cpp controller_interface hardware_interface pluginlib
+  rclcpp rclcpp_lifecycle riptide_dynamics)
+set_target_properties(riptide_control PROPERTIES
+  INSTALL_RPATH "${PINOCCHIO_ROOT}/lib")
 
-# Register the controller with controller_interface via pluginlib.
+# Register the ros2_control controllers and the IControlLaw plugins.
 pluginlib_export_plugin_description_file(controller_interface controller_plugins.xml)
+pluginlib_export_plugin_description_file(riptide_control control_law_plugins.xml)
 
 install(TARGETS riptide_control
   EXPORT export_riptide_control
@@ -36,7 +50,8 @@ install(TARGETS riptide_control
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
-install(FILES controller_plugins.xml DESTINATION share/${PROJECT_NAME})
+install(FILES controller_plugins.xml control_law_plugins.xml
+  DESTINATION share/${PROJECT_NAME})
 
 ament_export_include_directories(include)
 ament_export_libraries(riptide_control)

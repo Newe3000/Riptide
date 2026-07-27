@@ -3,7 +3,8 @@
 #include <memory>
 
 #include <Eigen/Dense>
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/node_interfaces/node_logging_interface.hpp>
+#include <rclcpp/node_interfaces/node_parameters_interface.hpp>
 
 #include "riptide_dynamics/dynamics_model_interface.hpp"
 #include "riptide_dynamics/robot_state.hpp"
@@ -21,9 +22,11 @@ class IControlLaw
 public:
   virtual ~IControlLaw() = default;
 
-  /// One-time setup: read parameters from `node`, capture the shared model.
+  /// One-time setup: read parameters (host-agnostic: works for both
+  /// rclcpp::Node and LifecycleNode via their interfaces), capture the model.
   virtual bool on_configure(
-    const rclcpp::Node::SharedPtr & node,
+    const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
+    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
     std::shared_ptr<IDynamicsModel> model) = 0;
 
   /// Real-time safe: no heap allocation, no logging, no locks. Returns the

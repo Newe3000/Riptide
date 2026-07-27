@@ -60,14 +60,21 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
     )
 
-    # Baseline torque controller (holds the arm against gravity). Disable with
-    # controller:=none to watch the arm free-fall instead.
+    # Which controller to spawn (controller:=pd|ee|none).
     pd_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=["joint_pd_controller", "--controller-manager", "/controller_manager"],
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("controller"), "' == 'pd'"])),
+    )
+    # Task-space EE stabilization (Pinocchio + impedance) — rejects base motion.
+    ee_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["ee_stabilization_controller", "--controller-manager", "/controller_manager"],
+        condition=IfCondition(
+            PythonExpression(["'", LaunchConfiguration("controller"), "' == 'ee'"])),
     )
 
     # Optional RViz view of the live robot state (driven by /joint_states + TF).
@@ -116,7 +123,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "controller",
             default_value="pd",
-            description="Which controller to spawn: 'pd' (JointPdController) or 'none'.",
+            description="Controller to spawn: 'pd' (joint hold), 'ee' (task-space), 'none'.",
         ),
         DeclareLaunchArgument(
             "disturbance",
@@ -127,6 +134,7 @@ def generate_launch_description():
         controller_manager,
         joint_state_broadcaster_spawner,
         pd_controller_spawner,
+        ee_controller_spawner,
         mock_base_tf,
         disturbance_node,
         rviz_node,

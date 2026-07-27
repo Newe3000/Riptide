@@ -16,8 +16,8 @@ See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full architecture and roadmap.
 | `riptide_description` | AUV cube base + Franka arm assembly + `ros2_control` seam + MJCF | **Phase 2** |
 | `riptide_msgs` | `EndEffectorTarget`, `DisturbanceCommand`, `ControlDebug` | **Phase 1** |
 | `riptide_bringup` | Launch files | **Phase 1** |
-| `riptide_dynamics` | `IDynamicsModel` / `RobotState` interfaces | interface only |
-| `riptide_control` | `JointPdController` + `IControlLaw` interface | **Phase 2** |
+| `riptide_dynamics` | `IDynamicsModel` + `PinocchioModel` (whole-body dynamics) | **Phase 4** |
+| `riptide_control` | `JointPdController`, `EeStabilizationController` + `TaskSpaceImpedance` | **Phase 4** |
 | `riptide_mujoco` | MuJoCo `SystemInterface` + floating base + disturbances | **Phase 3** |
 | `riptide_disturbance` | Disturbance scenario generator (current/sinusoid/impulse) | **Phase 3** |
 
@@ -26,7 +26,12 @@ See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full architecture and roadmap.
 - ROS 2 **Jazzy**
 - A **MuJoCo SDK** (headers + `libmujoco`) for building `riptide_mujoco`.
   `CMakeLists` looks under `MUJOCO_ROOT` (env or `-D`), defaulting to
-  `~/.mujoco/mujoco-3.10.0`. Override for a different location/version.
+  `~/.mujoco/mujoco-3.10.0`.
+- **Pinocchio** (C++) for `riptide_dynamics`. `CMakeLists` looks under
+  `PINOCCHIO_ROOT` (env or `-D`), defaulting to `~/.local/pinocchio`. Either
+  `sudo apt install ros-jazzy-pinocchio` (then set `PINOCCHIO_ROOT` to
+  `/opt/ros/jazzy`), or build from source (python/collision OFF, urdf ON) into
+  `~/.local/pinocchio`.
 
 ## Build & run
 
@@ -59,33 +64,38 @@ ros2 topic echo --once /joint_states --field position
 ## Running it
 
 ```bash
-# MuJoCo physics, PD hold controller, RViz, steady-current disturbance:
+# Task-space EE stabilization (Pinocchio impedance) under a current, in RViz:
 ros2 launch riptide_bringup sim.launch.py \
-    use_mock_hardware:=false controller:=pd rviz:=true disturbance:=sinusoid
+    use_mock_hardware:=false controller:=ee rviz:=true disturbance:=sinusoid
 ```
 
-Launch args: `use_mock_hardware` (true/false), `controller` (pd/none),
-`rviz` (true/false), `disturbance` (none/steady_current/sinusoid/impulse).
-Change the disturbance live: `ros2 param set /disturbance_generator scenario impulse`.
+Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
+`ee` task-space / `none`), `rviz` (true/false), `disturbance`
+(none/steady_current/sinusoid/impulse). Tune the disturbance live, e.g.
+`ros2 param set /disturbance_generator amplitude 20.0`.
 
-## Current status: Phase 3 (floating base + hydro + disturbances) complete
+## Current status: Phase 4 (task-space control with Pinocchio)
 
-- **Floating base**: `auv_base` is a MuJoCo `<freejoint/>` in a fluid medium
-  (drag + added mass). Neutral buoyancy is modelled as zero gravity; validated
-  that the vehicle hovers at rest and a current drives it to a drag-limited
-  speed. (Fossen-style explicit buoyancy is a documented later upgrade.)
-- **Base sensing**: pose + twist exposed as a 13-interface `ros2_control` sensor
-  (`auv_base/position.*`, `orientation.*`, `linear_velocity.*`,
-  `angular_velocity.*`); `MujocoSystem` also broadcasts `world→auv_base_link` TF
-  and `/riptide/odom`.
-- **Disturbances**: `riptide_disturbance` publishes `DisturbanceCommand`;
-  `MujocoSystem` applies it to `xfrc_applied` and echoes `/riptide/disturbance/
-  ground_truth`. Verified the base drifts/oscillates under the applied wrench.
-- Earlier phases still hold: mock + MuJoCo hardware, 7 `fer_joint*` effort seam,
-  `JointPdController` holding the arm.
+- **`PinocchioModel`** (`riptide_dynamics`): builds a reduced 7-DoF arm model
+  from `urdf/fer_arm.urdf`, and each cycle composes fixed-base FK/Jacobian with
+  the measured floating-base pose to expose the EE pose + Jacobian in the world
+  frame (plus M and Coriolis/gravity).
+- **`EeStabilizationController`** (`riptide_control`): reads the 7 arm joints +
+  the 13-interface base sensor, assembles a `RobotState`, and delegates to a
+  swappable `IControlLaw` plugin. Captures the EE target at activation.
+- **`TaskSpaceImpedance`** control law: world-frame EE pose error → task wrench →
+  `J^T` joint torques, with a nullspace posture task. Because the EE pose uses
+  the measured base pose, base motion appears as task error and is fought.
 
-**Note on the exit criterion.** The Phase 3 *infrastructure* (floating base,
-hydro, disturbances, base sensing) is done. Making the **end-effector** hold
-steady while the base is disturbed needs the task-space controller — that is
-**Phase 4** (the `IControlLaw` plugins reading the new base-state interfaces).
-Today the joint-space PD holds joint angles, so the EE still moves with the base.
+**What works / the honest result.** The stack runs end-to-end (Pinocchio → task
+space → torque → MuJoCo). Under a sinusoidal current the EE is **~2.3× steadier
+than the base** (e.g. base ±20 cm, EE ±8 cm on the disturbance axis).
+
+**The limiting factor** is that the AUV base is **free-floating with no
+station-keeping** — with no restoring force it behaves like an integrator and
+drifts far under a sustained current, and the arm's own reaction forces push the
+light base around. Fully holding the EE therefore needs **base dynamic
+positioning** (hull thrusters + an allocator/base controller) — the natural next
+step (the plan's "thruster allocation" item). Also still open in the control
+zoo: the LQR and MPC `IControlLaw` plugins (the architecture already supports
+dropping them in alongside `TaskSpaceImpedance`).

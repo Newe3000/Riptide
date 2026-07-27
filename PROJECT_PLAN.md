@@ -328,9 +328,10 @@ byte-reproducible metrics for fair comparison.
 |-------|-------------|----------------|--------|
 | **0. Spike** | MuJoCo seam (turned into a full custom SystemInterface, no `mujoco_ros2_control` needed); MJCF base+arm, no hydro | `controller_manager` reads joint states from MuJoCo, writes a torque, arm moves | ✅ done |
 | **1. Skeleton** | All packages scaffolded; `riptide_msgs`; description with `<ros2_control>` tags; broadcasters | hardware-interface listing shows expected sensors/actuators from the description | ✅ done |
-| **2. Baseline loop** | `JointPdController` (torque hold) done; task-space `IControlLaw` + `IDynamicsModel`(Pinocchio) pending | EE holds a static target with base fixed | 🟡 partial |
+| **2. Baseline loop** | `JointPdController` + task-space `EeStabilizationController` + `IDynamicsModel`(Pinocchio) done | EE holds a static target with base fixed | ✅ done |
 | **3. Floating base + hydro** | Free-joint base, fluid model, disturbance applier + generator | EE stabilizes under a steady-current disturbance | 🟡 infra done |
-| **4. Control zoo** | Impedance, LQR, MPC plugins; runtime switching | All 4 selectable at runtime, each holds target under moderate disturbance | ⬜ |
+| **4. Control zoo** | `TaskSpaceImpedance` done (pluginlib `IControlLaw`); LQR, MPC pending | All 4 selectable at runtime, each holds target under moderate disturbance | 🟡 impedance |
+| **4b. Base dynamic positioning** | Hull thrusters + allocator + base station-keeping controller | Base holds station under current; EE fully stabilizes | ⬜ next |
 | **5. Evaluation** | Scenario library, benchmark runner, metrics, `launch_testing` | Automated comparison report over the 4 across ≥3 disturbance scenarios | ⬜ |
 | **6. Extensibility proof** | Add a new sensor (e.g. DVL) + a thruster actuator via config only | New hardware appears end-to-end with **no** control-code change | ⬜ |
 

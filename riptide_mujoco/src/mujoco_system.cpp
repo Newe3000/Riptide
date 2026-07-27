@@ -228,8 +228,10 @@ hardware_interface::return_type MujocoSystem::read(
     base_state_[6] = d_->qpos[q + 3];  // qw
     for (int k = 0; k < 6; ++k) { base_state_[7 + k] = d_->qvel[v + k]; }
 
-    // Publish base viz at ~50 Hz (assuming a 500 Hz control loop).
-    if (node_ && (cycle_ % 10 == 0)) { publish_base_state(time); }
+    // Publish base viz at ~50 Hz (assuming a 500 Hz control loop). Stamp with
+    // the node clock so it matches robot_state_publisher's TF timestamps.
+    (void)time;
+    if (node_ && (cycle_ % 10 == 0)) { publish_base_state(node_->now()); }
   }
   ++cycle_;
   return hardware_interface::return_type::OK;
