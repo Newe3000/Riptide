@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<robot name="riptide" xmlns:xacro="http://ros.org/wiki/xacro">
+  <!--
+    Riptide: floating-base AUV (cube stand-in) + Franka "fer" (Panda) arm.
+    Top-level assembly consumed by robot_state_publisher and ros2_control.
+  -->
+
+  <!-- Phase 1 uses mock hardware; set to false in Phase 2 to load MuJoCo. -->
+  <xacro:arg name="use_mock_hardware" default="true"/>
+  <!-- Franka model + joint-name prefix (fer_joint1..7). -->
+  <xacro:arg name="arm_type" default="fer"/>
+
+  <xacro:include filename="$(find riptide_description)/urdf/common.xacro"/>
+  <xacro:include filename="$(find riptide_description)/urdf/auv_base.xacro"/>
+  <xacro:include filename="$(find riptide_description)/urdf/riptide.ros2_control.xacro"/>
+  <xacro:include filename="$(find riptide_description)/urdf/franka_fer.xacro"/>
+
+  <!-- World anchor. Phase 3 replaces this fixed attachment with a free joint. -->
+  <link name="world"/>
+
+  <!-- Cube hull: 0.5 m, 80 kg (roughly a small work-class AUV footprint). -->
+  <xacro:auv_base parent="world" name="auv_base" size="0.5" mass="80.0"/>
+
+  <!-- Franka fer mounted on the center of the cube's top face. -->
+  <xacro:franka_fer parent="auv_base_mount_link" robot_type="$(arg arm_type)">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:franka_fer>
+
+  <!-- ros2_control hardware + interface declarations. -->
+  <xacro:riptide_ros2_control
+    name="RiptideSystem"
+    arm_prefix="$(arg arm_type)"
+    use_mock_hardware="$(arg use_mock_hardware)"/>
+</robot>

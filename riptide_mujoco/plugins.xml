@@ -1,0 +1,12 @@
+<library path="riptide_mujoco">
+  <class
+    name="riptide_mujoco/MujocoSystem"
+    type="riptide_mujoco::MujocoSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      MuJoCo-backed ros2_control SystemInterface for Riptide: embeds MuJoCo,
+      reads joint state, writes joint torques, and steps the physics in the
+      controller_manager update loop.
+    </description>
+  </class>
+</library>

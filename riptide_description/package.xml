@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>riptide_description</name>
+  <version>0.0.1</version>
+  <description>
+    Riptide robot description: a floating-base AUV (cube stand-in for the hull)
+    with a Reach Bravo 7 manipulator, plus the ros2_control hardware seam.
+  </description>
+  <maintainer email="nepomukwerner23@gmail.com">Nepomuk Werner</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Description tooling -->
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+
+  <!-- The Franka fer (Panda) arm macro + meshes we mount on the base -->
+  <exec_depend>franka_description</exec_depend>
+
+  <!-- ros2_control runtime: mock hardware for Phase 1, real controllers later.
+       hardware_interface ships the mock_components/GenericSystem plugin. -->
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>hardware_interface</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

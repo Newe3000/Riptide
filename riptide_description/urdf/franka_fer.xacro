@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Mounts a Franka "fer" (Franka Emika Robot / Panda) arm + hand onto `parent`.
+
+    Unlike the vendor fer.urdf.xacro, this wrapper:
+      * emits NO ros2_control block (Riptide supplies its own effort seam),
+      * emits NO Gazebo tags,
+      * passes connected_to="" so franka_arm does not create its own base
+        link/joint — leaving fer_link0 as a free root we bolt onto the AUV here.
+
+    Full per-link inertials come from franka_description/robots/fer/inertials.yaml,
+    so the model is dynamics-ready for MuJoCo and the whole-body controllers.
+    Actuated arm joints: fer_joint1..fer_joint7. EE frame: fer_hand_tcp.
+  -->
+  <xacro:include filename="$(find franka_description)/robots/common/franka_robot.xacro"/>
+
+  <xacro:macro name="franka_fer" params="parent *origin robot_type:=fer">
+    <xacro:franka_robot
+      robot_type="${robot_type}"
+      joint_limits="${xacro.load_yaml('$(find franka_description)/robots/' + robot_type + '/joint_limits.yaml')}"
+      inertials="${xacro.load_yaml('$(find franka_description)/robots/' + robot_type + '/inertials.yaml')}"
+      kinematics="${xacro.load_yaml('$(find franka_description)/robots/' + robot_type + '/kinematics.yaml')}"
+      dynamics="${xacro.load_yaml('$(find franka_description)/robots/' + robot_type + '/dynamics.yaml')}"
+      hand="true"
+      ee_id="franka_hand"
+      gazebo="false"
+      ros2_control="false"
+      with_sc="false"
+      no_prefix="false"
+      arm_prefix=""
+      connected_to=""/>
+
+    <!-- Bolt the arm base (fer_link0) onto the AUV mount frame. -->
+    <joint name="${robot_type}_mount_joint" type="fixed">
+      <xacro:insert_block name="origin"/>
+      <parent link="${parent}"/>
+      <child link="${robot_type}_link0"/>
+    </joint>
+  </xacro:macro>
+</robot>

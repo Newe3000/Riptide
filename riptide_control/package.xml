@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>riptide_control</name>
+  <version>0.0.1</version>
+  <description>
+    EE-stabilization controller and the swappable IControlLaw plugins
+    (PID, impedance, LQR, MPC). Phase 1 provides the plugin interface only.
+  </description>
+  <maintainer email="nepomukwerner23@gmail.com">Nepomuk Werner</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>riptide_dynamics</depend>
+  <depend>pluginlib</depend>
+
+  <!-- Controller plugin (JointPdController) -->
+  <depend>controller_interface</depend>
+  <depend>hardware_interface</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <!-- Reusable inertial macros so the description is dynamics-ready for MuJoCo
+       and for the whole-body controllers (M, C, g) from Phase 2 onward. -->
+
+  <!-- Solid box inertia about its center of mass. -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia
+        ixx="${m * (y*y + z*z) / 12.0}" ixy="0.0" ixz="0.0"
+        iyy="${m * (x*x + z*z) / 12.0}" iyz="0.0"
+        izz="${m * (x*x + y*y) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- Solid cylinder inertia (axis along local z) about its center of mass. -->
+  <xacro:macro name="cylinder_inertia" params="m r l">
+    <inertial>
+      <mass value="${m}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia
+        ixx="${m * (3.0*r*r + l*l) / 12.0}" ixy="0.0" ixz="0.0"
+        iyy="${m * (3.0*r*r + l*l) / 12.0}" iyz="0.0"
+        izz="${m * r*r / 2.0}"/>
+    </inertial>
+  </xacro:macro>
+</robot>

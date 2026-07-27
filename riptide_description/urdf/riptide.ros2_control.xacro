@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <!--
+    The ros2_control "seam": the single boundary between the simulator/hardware
+    and the whole control stack.
+
+    Every actuated joint declares an `effort` command interface (R1: the
+    controller publishes joint torques) and position/velocity/effort state
+    interfaces (the sensors the controller reads back).
+
+    Adding an actuator or sensor is a *declarative* change here (R2): add a
+    <joint>/<sensor> block, and the hardware plugin exposes it automatically.
+    Controllers address these by logical name, never by index.
+
+    The <hardware> plugin is swappable WITHOUT touching the interface list:
+      * Phase 1  -> mock_components/GenericSystem (no physics, mirrors commands)
+      * Phase 2+ -> riptide_mujoco/MujocoSystem  (real MuJoCo dynamics)
+
+    The Franka gripper (fer_finger_joint1 + its mimic) is intentionally left out
+    of the control group — EE stabilization is a 7-DoF arm problem here.
+  -->
+
+  <!-- One actuated arm joint, effort-commanded. -->
+  <xacro:macro name="riptide_arm_joint" params="jname">
+    <joint name="${jname}">
+      <command_interface name="effort"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="effort">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="riptide_ros2_control" params="name arm_prefix use_mock_hardware">
+    <ros2_control name="${name}" type="system">
+      <hardware>
+        <xacro:if value="${use_mock_hardware}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="${use_mock_hardware}">
+          <!-- Phase 2: identical joint interfaces below, real dynamics behind. -->
+          <plugin>riptide_mujoco/MujocoSystem</plugin>
+          <param name="mjcf_model">$(find riptide_description)/mujoco/riptide.xml</param>
+        </xacro:unless>
+      </hardware>
+
+      <!-- Franka fer arm joints (7-DoF), base -> flange. -->
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint1"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint2"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint3"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint4"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint5"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint6"/>
+      <xacro:riptide_arm_joint jname="${arm_prefix}_joint7"/>
+    </ros2_control>
+  </xacro:macro>
+</robot>

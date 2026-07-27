@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rhoE '\\\\$\\\\\\(find [^\\)]+\\\\\\)/[a-zA-Z0-9_/.-]+' robots/common robots/fer)",
+      "Bash(kill -9 62065 62482 67408)",
+      "Bash(git add *)"
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>riptide_mujoco</name>
+  <version>0.0.1</version>
+  <description>
+    MuJoCo simulation seam: a hardware_interface::SystemInterface
+    (riptide_mujoco/MujocoSystem) that embeds MuJoCo, reads joint state, writes
+    joint torques and steps the physics in the controller_manager update loop.
+    Requires a MuJoCo SDK (headers + libmujoco); see CMakeLists MUJOCO_ROOT.
+  </description>
+  <maintainer email="nepomukwerner23@gmail.com">Nepomuk Werner</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

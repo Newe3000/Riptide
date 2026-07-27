@@ -1,0 +1,12 @@
+<library path="riptide_control">
+  <class
+    name="riptide_control/JointPdController"
+    type="riptide_control::JointPdController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Joint-space PD (effort) hold controller: commands per-joint torque to hold
+      a target configuration against gravity. Baseline for the Riptide control
+      stack and the simplest end-to-end demonstration of torque control.
+    </description>
+  </class>
+</library>

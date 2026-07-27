@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <!--
+    AUV base: a plain cube stand-in for the hull (per request).
+
+    Phase 1 attaches the cube to `world` with a FIXED joint so the arm loop can
+    be brought up against mock hardware. Phase 3 removes that fixed joint and
+    replaces it with a MuJoCo free joint + a floating-base state "sensor"
+    (base pose/twist exposed as ros2_control state interfaces) — the arm and
+    ros2_control blocks do not change.
+
+    A dedicated `${name}_mount_link` on the top face gives the arm a clean,
+    unambiguous mounting frame (the vendor bravo_7 joint carries a redundant
+    <origin>, so we never rely on its mount offset).
+  -->
+  <xacro:macro name="auv_base" params="parent name size mass">
+    <!-- Lift the cube so it rests with its bottom face on the world origin. -->
+    <joint name="${name}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}_link"/>
+      <origin xyz="0 0 ${size / 2.0}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="${name}_link">
+      <visual>
+        <geometry>
+          <box size="${size} ${size} ${size}"/>
+        </geometry>
+        <material name="auv_blue">
+          <color rgba="0.10 0.32 0.52 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <box size="${size} ${size} ${size}"/>
+        </geometry>
+      </collision>
+      <xacro:box_inertia m="${mass}" x="${size}" y="${size}" z="${size}"/>
+    </link>
+
+    <!-- Mounting frame at the center of the cube's top face. -->
+    <joint name="${name}_mount_joint" type="fixed">
+      <parent link="${name}_link"/>
+      <child link="${name}_mount_link"/>
+      <origin xyz="0 0 ${size / 2.0}" rpy="0 0 0"/>
+    </joint>
+    <link name="${name}_mount_link"/>
+  </xacro:macro>
+</robot>

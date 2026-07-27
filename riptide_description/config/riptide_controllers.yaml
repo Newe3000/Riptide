@@ -1,0 +1,42 @@
+# controller_manager configuration for the Riptide sim.
+#
+# Phase 1 runs only the joint_state_broadcaster to prove the state interfaces.
+# The EE-stabilization controller (riptide_control) is added in Phase 2/4 as an
+# additional entry here — no launch changes required, just spawn it.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz — matched to the intended MuJoCo step in Phase 2.
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Baseline torque controller: holds the arm against gravity (Phase 2 seed).
+    joint_pd_controller:
+      type: riptide_control/JointPdController
+
+    # Phase 4 (task-space stabilization, added later):
+    # ee_stabilization_controller:
+    #   type: riptide_control/EeStabilizationController
+
+joint_state_broadcaster:
+  ros__parameters:
+    use_local_topics: false
+    # `joints`/`interfaces` intentionally omitted => broadcast every joint and
+    # interface the hardware exposes (an empty [] can't be type-inferred).
+
+joint_pd_controller:
+  ros__parameters:
+    joints:
+      - fer_joint1
+      - fer_joint2
+      - fer_joint3
+      - fer_joint4
+      - fer_joint5
+      - fer_joint6
+      - fer_joint7
+    # Target pose to hold (Franka "ready" pose); matches the MJCF home qpos.
+    hold_position: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+    kp: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
+    kd: [ 50.0,  50.0,  50.0,  50.0,  20.0,  20.0, 10.0]
+    max_effort: [87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0]
