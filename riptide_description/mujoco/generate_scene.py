@@ -6,10 +6,16 @@ Transforms applied:
     the URDF / ros2_control interface names (the SystemInterface maps by name);
   * replace the position (<general>) actuators with 7 torque <motor> actuators
     named fer_joint{i} (Riptide commands joint torques via the effort interface);
-  * nest the arm (link0 subtree) under a fixed cube "auv_base" body, so the scene
-    matches the URDF assembly and is ready for Phase 3 (swap the fixed base for a
-    free joint to make it floating);
-  * add a floor + an "ee" site at the hand TCP;
+  * nest the arm (link0 subtree) under the cube "auv_base" body;
+  * Phase 3: make auv_base a FLOATING base (<freejoint/>) in water --
+      - global fluid medium (density/viscosity) + the per-geom ellipsoid fluid
+        model give drag + added mass (velocity-dependent), so motion is damped
+        like it is underwater;
+      - NEUTRAL BUOYANCY is modelled as gravity = 0: the vehicle neither sinks
+        nor floats, external disturbances (current/impulses) are the forces of
+        interest. (MuJoCo's fluid model does not add Archimedes buoyancy, so a
+        higher-fidelity Fossen-style buoyancy+gravity model is a later upgrade.)
+  * add a seabed floor + an "ee" site at the hand TCP;
   * drop the keyframe (its ctrl dimension no longer matches the new actuators).
 
 Run:  python3 generate_scene.py   (regenerates riptide.xml in place)
@@ -25,11 +31,17 @@ OUT = os.path.join(HERE, "riptide.xml")
 # Franka torque limits [Nm]: joints 1-4 -> 87, joints 5-7 -> 12.
 TORQUE_LIMITS = [87, 87, 87, 87, 12, 12, 12]
 
-CUBE_SIZE = 0.5          # full edge length [m]
-CUBE_MASS = 80.0         # [kg]
+# --- Fluid medium (sea water) ------------------------------------------------
+WATER_DENSITY = 1000.0     # kg/m^3
+WATER_VISCOSITY = 0.0009   # Pa.s
+
+# --- AUV base ("hull" stand-in) ----------------------------------------------
+CUBE_SIZE = 0.6            # full edge length [m]
 HALF = CUBE_SIZE / 2.0
-# Solid box inertia about center: I = m*(a^2 + a^2)/12 with a = CUBE_SIZE.
-BOX_I = CUBE_MASS * (CUBE_SIZE**2 + CUBE_SIZE**2) / 12.0
+BASE_MASS = 80.0           # hull mass (buoyancy handled via neutral/zero-g model)
+START_Z = 1.2              # spawn height above the seabed [m]
+# Solid-box inertia about the CoM (kept simple/diagonal).
+BOX_I = BASE_MASS * (CUBE_SIZE**2 + CUBE_SIZE**2) / 12.0
 
 
 def main():
@@ -37,13 +49,16 @@ def main():
     root = tree.getroot()
     root.set("model", "riptide")
 
-    # --- simulation options -------------------------------------------------
+    # --- simulation options + fluid medium ----------------------------------
     opt = root.find("option")
     if opt is None:
         opt = ET.Element("option")
         root.insert(0, opt)
     opt.set("timestep", "0.002")          # 500 Hz, matches controller_manager
     opt.set("integrator", "implicitfast")
+    opt.set("density", str(WATER_DENSITY))
+    opt.set("viscosity", str(WATER_VISCOSITY))
+    opt.set("gravity", "0 0 0")           # neutral buoyancy (see module docstring)
 
     # --- rename arm joints joint{i} -> fer_joint{i} -------------------------
     rename = {f"joint{i}": f"fer_joint{i}" for i in range(1, 8)}
@@ -68,29 +83,31 @@ def main():
     for kf in root.findall("keyframe"):
         root.remove(kf)
 
-    # --- nest the arm under a fixed cube base --------------------------------
+    # --- floating AUV base with the arm on top -------------------------------
     wb = root.find("worldbody")
     link0 = next(b for b in wb.findall("body") if b.get("name") == "link0")
     wb.remove(link0)
 
-    base = ET.Element("body", {"name": "auv_base", "pos": f"0 0 {HALF}"})
-    # Phase 3: add <freejoint/> here to make the base floating.
+    base = ET.Element("body", {"name": "auv_base", "pos": f"0 0 {START_Z}"})
+    ET.SubElement(base, "freejoint", {"name": "auv_freejoint"})
     ET.SubElement(base, "inertial", {
-        "mass": str(CUBE_MASS), "pos": "0 0 0",
+        "mass": str(BASE_MASS), "pos": "0 0 0",
         "diaginertia": f"{BOX_I:.4f} {BOX_I:.4f} {BOX_I:.4f}",
     })
+    # Ellipsoid fluid model on the hull => buoyancy + added mass + drag.
     ET.SubElement(base, "geom", {
         "name": "auv_base_geom", "type": "box",
         "size": f"{HALF} {HALF} {HALF}", "rgba": "0.10 0.32 0.52 1",
+        "fluidshape": "ellipsoid",
     })
     link0.set("pos", f"0 0 {HALF}")   # sit the arm on the cube's top face
     base.append(link0)
     wb.append(base)
 
-    # --- floor + EE site -----------------------------------------------------
+    # --- seabed floor + EE site ---------------------------------------------
     ET.SubElement(wb, "geom", {
-        "name": "floor", "type": "plane", "size": "5 5 0.1",
-        "pos": "0 0 0", "rgba": "0.25 0.26 0.28 1",
+        "name": "floor", "type": "plane", "size": "10 10 0.1",
+        "pos": "0 0 0", "rgba": "0.20 0.22 0.24 1",
     })
     for b in root.iter("body"):
         if b.get("name") == "hand":

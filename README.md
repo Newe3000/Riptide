@@ -17,8 +17,9 @@ See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full architecture and roadmap.
 | `riptide_msgs` | `EndEffectorTarget`, `DisturbanceCommand`, `ControlDebug` | **Phase 1** |
 | `riptide_bringup` | Launch files | **Phase 1** |
 | `riptide_dynamics` | `IDynamicsModel` / `RobotState` interfaces | interface only |
-| `riptide_control` | `IControlLaw` + EE-stabilization controller | interface only |
-| `riptide_mujoco` | MuJoCo `SystemInterface` (`MujocoSystem`) | **Phase 2** |
+| `riptide_control` | `JointPdController` + `IControlLaw` interface | **Phase 2** |
+| `riptide_mujoco` | MuJoCo `SystemInterface` + floating base + disturbances | **Phase 3** |
+| `riptide_disturbance` | Disturbance scenario generator (current/sinusoid/impulse) | **Phase 3** |
 
 ## Prerequisites
 
@@ -55,20 +56,36 @@ ros2 topic hz /joint_states
 ros2 topic echo --once /joint_states --field position
 ```
 
-## Current status: Phase 2 complete
+## Running it
 
-- Cube AUV base (fixed to `world`) + **Franka fer (Panda)** arm with hand;
-  full per-link inertials. Description parses (`check_urdf`) and expands.
-- `ros2_control` seam works with **both** hardware plugins, selected by one arg:
-  - `mock_components/GenericSystem` (Phase 1), and
-  - **`riptide_mujoco/MujocoSystem`** (Phase 2) — embeds MuJoCo 3.10, maps the 7
-    `fer_joint*` by name, reads position/velocity/effort, writes joint torques,
-    and steps `mj_step` in the controller_manager loop at ~500 Hz.
-- MuJoCo scene `riptide_description/mujoco/riptide.xml` — Menagerie Panda with
-  torque actuators on the cube base (see that dir's README for provenance).
-- Verified live: MuJoCo loads/activates, `/joint_states` at ~500 Hz, arm evolves
-  under gravity (stepping proven); commanded torque drives the joints.
+```bash
+# MuJoCo physics, PD hold controller, RViz, steady-current disturbance:
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=pd rviz:=true disturbance:=sinusoid
+```
 
-**Phase 3 next:** replace the fixed base with a `<freejoint/>` (floating base) +
-expose base pose/twist as state interfaces, then add hydrodynamics + the
-disturbance applier. **Phase 4:** the four `IControlLaw` plugins.
+Launch args: `use_mock_hardware` (true/false), `controller` (pd/none),
+`rviz` (true/false), `disturbance` (none/steady_current/sinusoid/impulse).
+Change the disturbance live: `ros2 param set /disturbance_generator scenario impulse`.
+
+## Current status: Phase 3 (floating base + hydro + disturbances) complete
+
+- **Floating base**: `auv_base` is a MuJoCo `<freejoint/>` in a fluid medium
+  (drag + added mass). Neutral buoyancy is modelled as zero gravity; validated
+  that the vehicle hovers at rest and a current drives it to a drag-limited
+  speed. (Fossen-style explicit buoyancy is a documented later upgrade.)
+- **Base sensing**: pose + twist exposed as a 13-interface `ros2_control` sensor
+  (`auv_base/position.*`, `orientation.*`, `linear_velocity.*`,
+  `angular_velocity.*`); `MujocoSystem` also broadcasts `world→auv_base_link` TF
+  and `/riptide/odom`.
+- **Disturbances**: `riptide_disturbance` publishes `DisturbanceCommand`;
+  `MujocoSystem` applies it to `xfrc_applied` and echoes `/riptide/disturbance/
+  ground_truth`. Verified the base drifts/oscillates under the applied wrench.
+- Earlier phases still hold: mock + MuJoCo hardware, 7 `fer_joint*` effort seam,
+  `JointPdController` holding the arm.
+
+**Note on the exit criterion.** The Phase 3 *infrastructure* (floating base,
+hydro, disturbances, base sensing) is done. Making the **end-effector** hold
+steady while the base is disturbed needs the task-space controller — that is
+**Phase 4** (the `IControlLaw` plugins reading the new base-state interfaces).
+Today the joint-space PD holds joint angles, so the EE still moves with the base.

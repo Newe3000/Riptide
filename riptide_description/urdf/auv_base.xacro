@@ -3,22 +3,21 @@
   <!--
     AUV base: a plain cube stand-in for the hull (per request).
 
-    Phase 1 attaches the cube to `world` with a FIXED joint so the arm loop can
-    be brought up against mock hardware. Phase 3 removes that fixed joint and
-    replaces it with a MuJoCo free joint + a floating-base state "sensor"
-    (base pose/twist exposed as ros2_control state interfaces) — the arm and
-    ros2_control blocks do not change.
+    Phase 3: the base is FLOATING. The world->base joint is of type "floating",
+    so robot_state_publisher does not publish that transform — instead the
+    MuJoCo SystemInterface broadcasts world->${name}_link TF from the simulated
+    free-joint pose (and exposes base pose/twist as a ros2_control sensor).
+    `${name}_link` is therefore the cube center (the frame MuJoCo publishes).
 
     A dedicated `${name}_mount_link` on the top face gives the arm a clean,
-    unambiguous mounting frame (the vendor bravo_7 joint carries a redundant
-    <origin>, so we never rely on its mount offset).
+    unambiguous mounting frame.
   -->
   <xacro:macro name="auv_base" params="parent name size mass">
-    <!-- Lift the cube so it rests with its bottom face on the world origin. -->
-    <joint name="${name}_joint" type="fixed">
+    <!-- Floating base: transform supplied at runtime (TF), not by RSP. -->
+    <joint name="${name}_joint" type="floating">
       <parent link="${parent}"/>
       <child link="${name}_link"/>
-      <origin xyz="0 0 ${size / 2.0}" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
     <link name="${name}_link">

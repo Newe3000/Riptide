@@ -10,6 +10,10 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(riptide_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 # ---- MuJoCo -----------------------------------------------------------------
 # Point at a MuJoCo SDK (headers + libmujoco). Override with -DMUJOCO_ROOT=... or
@@ -40,7 +44,8 @@ target_include_directories(riptide_mujoco PUBLIC
   "${MUJOCO_INCLUDE_DIR}")
 target_link_libraries(riptide_mujoco "${MUJOCO_LIB}")
 ament_target_dependencies(riptide_mujoco
-  hardware_interface pluginlib rclcpp rclcpp_lifecycle)
+  hardware_interface pluginlib rclcpp rclcpp_lifecycle
+  riptide_msgs geometry_msgs nav_msgs tf2_ros)
 
 # Embed the MuJoCo lib dir so libmujoco resolves at runtime.
 set_target_properties(riptide_mujoco PROPERTIES

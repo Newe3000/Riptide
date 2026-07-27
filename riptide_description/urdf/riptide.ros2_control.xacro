@@ -36,6 +36,25 @@
     </joint>
   </xacro:macro>
 
+  <!-- Floating-base pose + twist, exposed as a ros2_control sensor (Phase 3). -->
+  <xacro:macro name="riptide_base_sensor" params="name">
+    <sensor name="${name}">
+      <state_interface name="position.x"/>
+      <state_interface name="position.y"/>
+      <state_interface name="position.z"/>
+      <state_interface name="orientation.x"/>
+      <state_interface name="orientation.y"/>
+      <state_interface name="orientation.z"/>
+      <state_interface name="orientation.w"/>
+      <state_interface name="linear_velocity.x"/>
+      <state_interface name="linear_velocity.y"/>
+      <state_interface name="linear_velocity.z"/>
+      <state_interface name="angular_velocity.x"/>
+      <state_interface name="angular_velocity.y"/>
+      <state_interface name="angular_velocity.z"/>
+    </sensor>
+  </xacro:macro>
+
   <xacro:macro name="riptide_ros2_control" params="name arm_prefix use_mock_hardware">
     <ros2_control name="${name}" type="system">
       <hardware>
@@ -43,9 +62,10 @@
           <plugin>mock_components/GenericSystem</plugin>
         </xacro:if>
         <xacro:unless value="${use_mock_hardware}">
-          <!-- Phase 2: identical joint interfaces below, real dynamics behind. -->
           <plugin>riptide_mujoco/MujocoSystem</plugin>
           <param name="mjcf_model">$(find riptide_description)/mujoco/riptide.xml</param>
+          <param name="floating_base_joint">auv_freejoint</param>
+          <param name="base_link_frame">auv_base_link</param>
         </xacro:unless>
       </hardware>
 
@@ -57,6 +77,9 @@
       <xacro:riptide_arm_joint jname="${arm_prefix}_joint5"/>
       <xacro:riptide_arm_joint jname="${arm_prefix}_joint6"/>
       <xacro:riptide_arm_joint jname="${arm_prefix}_joint7"/>
+
+      <!-- Floating-base sensor (MuJoCo populates it; mock reports zeros). -->
+      <xacro:riptide_base_sensor name="auv_base"/>
     </ros2_control>
   </xacro:macro>
 </robot>

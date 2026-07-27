@@ -328,8 +328,8 @@ byte-reproducible metrics for fair comparison.
 |-------|-------------|----------------|--------|
 | **0. Spike** | MuJoCo seam (turned into a full custom SystemInterface, no `mujoco_ros2_control` needed); MJCF base+arm, no hydro | `controller_manager` reads joint states from MuJoCo, writes a torque, arm moves | ✅ done |
 | **1. Skeleton** | All packages scaffolded; `riptide_msgs`; description with `<ros2_control>` tags; broadcasters | hardware-interface listing shows expected sensors/actuators from the description | ✅ done |
-| **2. Baseline loop** | `EeStabilizationController` + `PidControlLaw`; `IDynamicsModel`(Pinocchio) | EE holds a static target with base fixed | ⬜ next |
-| **3. Floating base + hydro** | Free-joint base, fluid model, disturbance applier + generator | EE stabilizes under a steady-current disturbance | ⬜ |
+| **2. Baseline loop** | `JointPdController` (torque hold) done; task-space `IControlLaw` + `IDynamicsModel`(Pinocchio) pending | EE holds a static target with base fixed | 🟡 partial |
+| **3. Floating base + hydro** | Free-joint base, fluid model, disturbance applier + generator | EE stabilizes under a steady-current disturbance | 🟡 infra done |
 | **4. Control zoo** | Impedance, LQR, MPC plugins; runtime switching | All 4 selectable at runtime, each holds target under moderate disturbance | ⬜ |
 | **5. Evaluation** | Scenario library, benchmark runner, metrics, `launch_testing` | Automated comparison report over the 4 across ≥3 disturbance scenarios | ⬜ |
 | **6. Extensibility proof** | Add a new sensor (e.g. DVL) + a thruster actuator via config only | New hardware appears end-to-end with **no** control-code change | ⬜ |
@@ -339,6 +339,14 @@ built as a full custom `riptide_mujoco/MujocoSystem` rather than a throwaway
 spike, and the `ros2 control` CLI (`ros2controlcli`) isn't installed here so the
 hardware listing is queried via `controller_manager` services. Phase 6 is
 intentionally a first-class milestone: it's the acceptance test for R2.
+
+Phases 2 & 3 are "🟡": Phase 3 *infrastructure* (floating `<freejoint/>` base,
+fluid drag/added-mass, base pose/twist as a ros2_control sensor + TF/odom,
+topic-driven disturbance injection with ground truth, and the scenario
+generator) is complete and verified. Both exit criteria — *EE holds a static
+target* (Phase 2) and *EE stabilizes under a current* (Phase 3) — require the
+task-space controller, which is Phase 4. Buoyancy is modelled as neutral
+(zero-g); an explicit Fossen buoyancy+gravity model is the fidelity upgrade.
 
 ---
 

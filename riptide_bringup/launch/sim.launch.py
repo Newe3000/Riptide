@@ -6,7 +6,7 @@ Phase 2 with `use_mock_hardware:=false` — no other launch change needed.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import (
     Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression,
 )
@@ -18,6 +18,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     rviz = LaunchConfiguration("rviz")
+    disturbance = LaunchConfiguration("disturbance")
 
     description_pkg = FindPackageShare("riptide_description")
 
@@ -80,6 +81,27 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Floating base: MuJoCo broadcasts world->auv_base_link. On the mock path
+    # (no physics) publish a static transform so RViz still has the base frame.
+    mock_base_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="mock_base_tf",
+        arguments=["0", "0", "0.3", "0", "0", "0", "world", "auv_base_link"],
+        condition=IfCondition(use_mock_hardware),
+    )
+
+    # Disturbance generator (steady_current / sinusoid / impulse). 'none' => off.
+    disturbance_node = Node(
+        package="riptide_disturbance",
+        executable="disturbance_generator",
+        name="disturbance_generator",
+        parameters=[{"scenario": disturbance}],
+        condition=UnlessCondition(
+            PythonExpression(["'", disturbance, "' == 'none'"])),
+        output="screen",
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             "use_mock_hardware",
@@ -96,9 +118,16 @@ def generate_launch_description():
             default_value="pd",
             description="Which controller to spawn: 'pd' (JointPdController) or 'none'.",
         ),
+        DeclareLaunchArgument(
+            "disturbance",
+            default_value="none",
+            description="Disturbance scenario: none | steady_current | sinusoid | impulse.",
+        ),
         robot_state_publisher,
         controller_manager,
         joint_state_broadcaster_spawner,
         pd_controller_spawner,
+        mock_base_tf,
+        disturbance_node,
         rviz_node,
     ])

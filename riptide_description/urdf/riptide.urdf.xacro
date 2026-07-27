@@ -18,8 +18,8 @@
   <!-- World anchor. Phase 3 replaces this fixed attachment with a free joint. -->
   <link name="world"/>
 
-  <!-- Cube hull: 0.5 m, 80 kg (roughly a small work-class AUV footprint). -->
-  <xacro:auv_base parent="world" name="auv_base" size="0.5" mass="80.0"/>
+  <!-- Cube hull: 0.6 m, 80 kg (matches the MuJoCo scene). -->
+  <xacro:auv_base parent="world" name="auv_base" size="0.6" mass="80.0"/>
 
   <!-- Franka fer mounted on the center of the cube's top face. -->
   <xacro:franka_fer parent="auv_base_mount_link" robot_type="$(arg arm_type)">
