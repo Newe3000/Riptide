@@ -107,10 +107,32 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(
       base_joint.c_str(), base_sensor_name_.c_str(), base_iface_names_.size());
   }
 
+  // --- hull thrusters exposed via <gpio> (optional) -----------------------
+  // Each gpio command interface names a MuJoCo force actuator (thr_*).
+  for (const auto & gpio : info_.gpios)
+  {
+    for (const auto & ci : gpio.command_interfaces)
+    {
+      const int aid = mj_name2id(m_, mjOBJ_ACTUATOR, ci.name.c_str());
+      if (aid < 0)
+      {
+        RCLCPP_FATAL(rclcpp::get_logger(kLogger),
+          "Thruster actuator '%s' (gpio '%s') is not present in the MJCF.",
+          ci.name.c_str(), gpio.name.c_str());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
+      thr_gpio_.push_back(gpio.name);
+      thr_name_.push_back(ci.name);
+      thr_act_id_.push_back(aid);
+    }
+  }
+  thr_cmd_.assign(thr_act_id_.size(), 0.0);
+  thr_force_.assign(thr_act_id_.size(), 0.0);
+
   RCLCPP_INFO(rclcpp::get_logger(kLogger),
-    "Loaded MJCF '%s': %ld dof, %ld actuators; mapped %zu ros2_control joints.",
+    "Loaded MJCF '%s': %ld dof, %ld actuators; mapped %zu joints, %zu thrusters.",
     mjcf_path.c_str(),
-    static_cast<long>(m_->nv), static_cast<long>(m_->nu), n);
+    static_cast<long>(m_->nv), static_cast<long>(m_->nu), n, thr_act_id_.size());
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -156,6 +178,10 @@ std::vector<hardware_interface::StateInterface> MujocoSystem::export_state_inter
       ifaces.emplace_back(base_sensor_name_, base_iface_names_[k], &base_state_[k]);
     }
   }
+  for (std::size_t k = 0; k < thr_act_id_.size(); ++k)
+  {
+    ifaces.emplace_back(thr_gpio_[k], thr_name_[k], &thr_force_[k]);
+  }
   return ifaces;
 }
 
@@ -166,6 +192,10 @@ std::vector<hardware_interface::CommandInterface> MujocoSystem::export_command_i
   {
     ifaces.emplace_back(
       info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &eff_cmd_[i]);
+  }
+  for (std::size_t k = 0; k < thr_act_id_.size(); ++k)
+  {
+    ifaces.emplace_back(thr_gpio_[k], thr_name_[k], &thr_cmd_[k]);
   }
   return ifaces;
 }
@@ -179,6 +209,7 @@ hardware_interface::CallbackReturn MujocoSystem::on_activate(
     d_->qpos[qpos_adr_[i]] = home_[i];
     eff_cmd_[i] = 0.0;
   }
+  std::fill(thr_cmd_.begin(), thr_cmd_.end(), 0.0);
   mj_forward(m_, d_);
   read(rclcpp::Time(0), rclcpp::Duration(0, 0));
   RCLCPP_INFO(rclcpp::get_logger(kLogger), "MuJoCo system activated.");
@@ -212,6 +243,10 @@ hardware_interface::return_type MujocoSystem::read(
     pos_[i] = d_->qpos[qpos_adr_[i]];
     vel_[i] = d_->qvel[dof_adr_[i]];
     eff_[i] = d_->actuator_force[act_id_[i]];
+  }
+  for (std::size_t k = 0; k < thr_act_id_.size(); ++k)
+  {
+    thr_force_[k] = d_->actuator_force[thr_act_id_[k]];
   }
 
   if (has_base_)
@@ -256,6 +291,13 @@ hardware_interface::return_type MujocoSystem::write(
   {
     const double cmd = eff_cmd_[i];
     d_->ctrl[act_id_[i]] = std::isnan(cmd) ? 0.0 : cmd;
+  }
+
+  // Hull thruster force commands.
+  for (std::size_t k = 0; k < thr_act_id_.size(); ++k)
+  {
+    const double cmd = thr_cmd_[k];
+    d_->ctrl[thr_act_id_[k]] = std::isnan(cmd) ? 0.0 : cmd;
   }
 
   // Advance sim by the control period (>=1 MuJoCo step). Clamp the step count

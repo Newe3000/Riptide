@@ -43,6 +43,27 @@ START_Z = 1.2              # spawn height above the seabed [m]
 # Solid-box inertia about the CoM (kept simple/diagonal).
 BOX_I = BASE_MASS * (CUBE_SIZE**2 + CUBE_SIZE**2) / 12.0
 
+# --- Hull thrusters (Phase 4b: base dynamic positioning) ---------------------
+# Each thruster is a body-fixed force actuator applied at a site. The chosen
+# layout gives control authority over the 4 requested DOFs:
+#   * 1 surge thruster along body +x  -> forward/backward (Fx),
+#   * 4 vertical thrusters along body +z at the top corners -> their common mode
+#     is heave (Fz, up/down); front/back differential -> pitch (My); left/right
+#     differential -> roll (Mx).
+# Sway (Fy) and yaw (Mz) are intentionally left unactuated (not requested).
+# A force-along-axis at position r produces wrench [axis; r x axis] per unit ctrl,
+# so the BaseThrusterController rebuilds the allocation matrix from this geometry.
+THRUST_LIMIT = 200.0       # per-thruster force clamp [N]
+TA = 0.22                  # corner offset of the vertical thrusters [m]
+#   name,        position (x, y, z),   force axis (body frame)
+THRUSTERS = [
+    ("thr_surge", (-HALF, 0.0, 0.0),   (1.0, 0.0, 0.0)),
+    ("thr_vfl",   ( TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # front-left
+    ("thr_vfr",   ( TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # front-right
+    ("thr_vbl",   (-TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # back-left
+    ("thr_vbr",   (-TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # back-right
+]
+
 
 def main():
     tree = ET.parse(SRC)
@@ -78,6 +99,15 @@ def main():
             "ctrlrange": f"-{lim} {lim}",
             "forcerange": f"-{lim} {lim}",
         })
+    # Hull thruster force actuators (applied at the sites, body-frame axis).
+    for tname, _pos, (ax, ay, az) in THRUSTERS:
+        ET.SubElement(act, "motor", {
+            "name": tname,
+            "site": tname,
+            "gear": f"{ax} {ay} {az} 0 0 0",
+            "ctrlrange": f"-{THRUST_LIMIT} {THRUST_LIMIT}",
+            "forcerange": f"-{THRUST_LIMIT} {THRUST_LIMIT}",
+        })
 
     # --- drop keyframe (ctrl dimension changed) -----------------------------
     for kf in root.findall("keyframe"):
@@ -100,6 +130,12 @@ def main():
         "size": f"{HALF} {HALF} {HALF}", "rgba": "0.10 0.32 0.52 1",
         "fluidshape": "ellipsoid",
     })
+    # Thruster attachment sites (visualised as small orange markers).
+    for tname, (px, py, pz), _axis in THRUSTERS:
+        ET.SubElement(base, "site", {
+            "name": tname, "pos": f"{px} {py} {pz}", "size": "0.03",
+            "rgba": "1.0 0.55 0.0 1",
+        })
     link0.set("pos", f"0 0 {HALF}")   # sit the arm on the cube's top face
     base.append(link0)
     wb.append(base)

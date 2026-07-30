@@ -19,4 +19,14 @@
       plugin (Pinocchio-backed dynamics). Rejects base disturbances at the EE.
     </description>
   </class>
+  <class
+    name="riptide_control/BaseThrusterController"
+    type="riptide_control::BaseThrusterController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Base dynamic-positioning controller: reads the floating-base sensor and
+      allocates a PD station-keeping wrench (surge/heave + roll/pitch leveling)
+      to the hull thrusters, so the base holds position instead of drifting.
+    </description>
+  </class>
 </library>

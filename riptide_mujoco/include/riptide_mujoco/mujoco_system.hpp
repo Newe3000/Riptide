@@ -77,6 +77,15 @@ private:
   std::vector<double> eff_cmd_;
   std::vector<double> home_;
 
+  // Hull thrusters exposed via a ros2_control <gpio> (Phase 4b). Each command
+  // interface is mapped by name to a MuJoCo force actuator; the state interface
+  // reports the applied force. Parallel arrays.
+  std::vector<std::string> thr_gpio_;    ///< owning gpio name (interface prefix)
+  std::vector<std::string> thr_name_;    ///< actuator / interface name
+  std::vector<int> thr_act_id_;          ///< MuJoCo actuator id
+  std::vector<double> thr_cmd_;          ///< commanded force [N]
+  std::vector<double> thr_force_;        ///< applied force (state) [N]
+
   // Floating base exposed as a sensor: pose (3 + quat) + twist (6) = 13 values.
   bool has_base_{false};
   std::string base_sensor_name_;

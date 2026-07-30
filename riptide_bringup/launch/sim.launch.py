@@ -104,6 +104,14 @@ def generate_launch_description():
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("controller"), "' == 'ee'"])),
     )
+    # Base dynamic positioning (hull thrusters). Runs alongside any arm
+    # controller; toggle with base_control:=false to compare with/without it.
+    base_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["base_thruster_controller", "--controller-manager", "/controller_manager"],
+        condition=IfCondition(LaunchConfiguration("base_control")),
+    )
 
     # Optional RViz view of the live robot state (driven by /joint_states + TF).
     rviz_config = PathJoinSubstitution([description_pkg, "rviz", "riptide.rviz"])
@@ -154,6 +162,11 @@ def generate_launch_description():
             description="Controller to spawn: 'pd' (joint hold), 'ee' (task-space), 'none'.",
         ),
         DeclareLaunchArgument(
+            "base_control",
+            default_value="true",
+            description="Run the hull-thruster base dynamic-positioning controller.",
+        ),
+        DeclareLaunchArgument(
             "disturbance",
             default_value="none",
             description="Disturbance scenario: none | steady_current | sinusoid | impulse.",
@@ -163,6 +176,7 @@ def generate_launch_description():
         joint_state_broadcaster_spawner,
         pd_controller_spawner,
         ee_controller_spawner,
+        base_controller_spawner,
         mock_base_tf,
         disturbance_node,
         rviz_node,

@@ -22,6 +22,10 @@ controller_manager:
     ee_stabilization_controller:
       type: riptide_control/EeStabilizationController
 
+    # Phase 4b: base dynamic positioning via hull thrusters.
+    base_thruster_controller:
+      type: riptide_control/BaseThrusterController
+
 joint_state_broadcaster:
   ros__parameters:
     use_local_topics: false
@@ -70,3 +74,34 @@ ee_stabilization_controller:
     impedance.kd_ori: [12.0, 12.0, 12.0]
     impedance.null_kp: 8.0
     impedance.null_kd: 2.0
+
+base_thruster_controller:
+  ros__parameters:
+    base_sensor: auv_base
+    thruster_gpio: thrusters
+    # Names must match the MuJoCo <motor> actuators / the ros2_control gpio.
+    thrusters: [thr_surge, thr_vfl, thr_vfr, thr_vbl, thr_vbr]
+    # Thruster geometry (must mirror generate_scene.py): position [x,y,z] and
+    # unit force axis, flattened per thruster. The allocation matrix is rebuilt
+    # from this, so re-laying-out the thrusters is a config-only change.
+    thruster_positions: [-0.3, 0.0, 0.0,
+                          0.22, 0.22, 0.3,
+                          0.22, -0.22, 0.3,
+                         -0.22, 0.22, 0.3,
+                         -0.22, -0.22, 0.3]
+    thruster_axes: [1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0,
+                    0.0, 0.0, 1.0,
+                    0.0, 0.0, 1.0,
+                    0.0, 0.0, 1.0]
+    max_thrust: 200.0
+    # Station-keeping PD: surge (x) / heave (z) position hold.
+    kp_x: 1000.0
+    kd_x: 800.0
+    kp_z: 1000.0
+    kd_z: 800.0
+    # Attitude leveling: roll / pitch to flat.
+    kp_roll: 400.0
+    kd_roll: 120.0
+    kp_pitch: 400.0
+    kd_pitch: 120.0

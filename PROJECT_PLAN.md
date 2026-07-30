@@ -331,7 +331,7 @@ byte-reproducible metrics for fair comparison.
 | **2. Baseline loop** | `JointPdController` + task-space `EeStabilizationController` + `IDynamicsModel`(Pinocchio) done | EE holds a static target with base fixed | ✅ done |
 | **3. Floating base + hydro** | Free-joint base, fluid model, disturbance applier + generator | EE stabilizes under a steady-current disturbance | 🟡 infra done |
 | **4. Control zoo** | `TaskSpaceImpedance` done (pluginlib `IControlLaw`); LQR, MPC pending | All 4 selectable at runtime, each holds target under moderate disturbance | 🟡 impedance |
-| **4b. Base dynamic positioning** | Hull thrusters + allocator + base station-keeping controller | Base holds station under current; EE fully stabilizes | ⬜ next |
+| **4b. Base dynamic positioning** | Hull thrusters (5, via `<gpio>`) + geometry-derived allocator + `BaseThrusterController` | Base holds station under current (surge/heave held, roll/pitch level) | ✅ done (sway/yaw unactuated) |
 | **5. Evaluation** | Scenario library, benchmark runner, metrics, `launch_testing` | Automated comparison report over the 4 across ≥3 disturbance scenarios | ⬜ |
 | **6. Extensibility proof** | Add a new sensor (e.g. DVL) + a thruster actuator via config only | New hardware appears end-to-end with **no** control-code change | ⬜ |
 
