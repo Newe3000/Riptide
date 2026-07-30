@@ -6,7 +6,10 @@
 
 controller_manager:
   ros__parameters:
-    update_rate: 500  # Hz — matched to the intended MuJoCo step in Phase 2.
+    update_rate: 250  # Hz — 4 ms control budget vs the 2 ms MuJoCo timestep, so
+                      # write() runs 2 physics substeps/cycle. Gives real-time
+                      # headroom (no FIFO priority here) => no overrun warnings.
+                      # Physics fidelity is unchanged (still 2 ms substeps).
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

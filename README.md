@@ -74,6 +74,26 @@ Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
 (none/steady_current/sinusoid/impulse). Tune the disturbance live, e.g.
 `ros2 param set /disturbance_generator amplitude 20.0`.
 
+## Troubleshooting
+
+- **The robot/base "teleports" or jumps around in RViz.** Almost always a
+  leftover sim from a previous run: Ctrl-C doesn't always reap `ros2_control_node`
+  (and closing the terminal orphans it). Each `ros2_control_node` embeds its own
+  MuJoCo world, so two of them publish two diverging `/joint_states` + `/tf`
+  streams and RViz jumps between them. `sim.launch.py` now reaps stale
+  `ros2_control_node` / `robot_state_publisher` / `rviz2` / `disturbance_generator`
+  before starting, so a fresh launch is always a single clean sim. To check by
+  hand: `ps -C ros2_control_node` should list exactly one process while running.
+- **The arm slams into its joint limits after a minute or two.** Expected with a
+  strong current and no base station-keeping — the free-floating base slowly
+  drifts out of the arm's reach, so the arm saturates trying to hold the fixed
+  world target. Lower the disturbance (`ros2 param set /disturbance_generator
+  amplitude 20.0`) for a longer clean demo; the real fix is base dynamic
+  positioning (see the status note below).
+- **"Overrun detected! ... missed its desired rate."** A benign warning: the
+  control loop occasionally exceeds its period without real-time (FIFO) priority,
+  which isn't available here. It self-corrects and doesn't affect the result.
+
 ## Current status: Phase 4 (task-space control with Pinocchio)
 
 - **`PinocchioModel`** (`riptide_dynamics`): builds a reduced 7-DoF arm model
