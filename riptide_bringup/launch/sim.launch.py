@@ -30,6 +30,7 @@ def _reap_stale_sim_processes():
     for name in (
         "ros2_control_node",        # the embedded-MuJoCo culprit
         "robot_state_publisher",    # stale latched /robot_description
+        "mock_base_tf",             # stale mock world->auv_base_link static TF
         "rviz2",
         "disturbance_generator",
     ):
