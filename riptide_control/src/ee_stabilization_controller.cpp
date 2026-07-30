@@ -1,5 +1,7 @@
 #include "riptide_control/ee_stabilization_controller.hpp"
 
+#include <cmath>
+
 #include <Eigen/Geometry>
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
@@ -17,6 +19,12 @@ const std::vector<std::string> kBaseIfaceNames = {
   "orientation.x", "orientation.y", "orientation.z", "orientation.w",
   "linear_velocity.x", "linear_velocity.y", "linear_velocity.z",
   "angular_velocity.x", "angular_velocity.y", "angular_velocity.z"};
+
+bool is_finite(const riptide::RobotState & s)
+{
+  return s.q.allFinite() && s.dq.allFinite() &&
+         s.base_pose.matrix().allFinite() && s.base_twist.allFinite();
+}
 }  // namespace
 
 controller_interface::CallbackReturn EeStabilizationController::on_init()
@@ -177,16 +185,11 @@ controller_interface::CallbackReturn EeStabilizationController::on_activate(
   }
   if (control_law_) { control_law_->reset(); }
 
-  // Capture the current EE world pose as the hold target, if requested.
-  if (get_node()->get_parameter("capture_target_on_activate").as_bool())
-  {
-    const riptide::RobotState s = read_state();
-    model_->update(s);
-    target_.pose = model_->framePose("ee");
-    const Eigen::Vector3d p = target_.pose.translation();
-    RCLCPP_INFO(get_node()->get_logger(),
-      "Holding captured EE target at world [%.3f, %.3f, %.3f].", p.x(), p.y(), p.z());
-  }
+  // Defer capturing the EE hold target to the first update() with a finite
+  // state. At activation the hardware's first read() may not have populated the
+  // state interfaces yet (they read NaN), which would poison the target. Until
+  // the capture happens, target_ holds the configured fallback from on_configure.
+  capture_pending_ = get_node()->get_parameter("capture_target_on_activate").as_bool();
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -206,14 +209,19 @@ riptide::RobotState EeStabilizationController::read_state() const
   riptide::RobotState state;
   state.q.resize(n);
   state.dq.resize(n);
+  // Treat a NaN interface (not yet written by the hardware's first read()) the
+  // same as an absent one: fall back to 0 rather than propagating the NaN.
+  auto finite_or_zero = [](double x) { return std::isfinite(x) ? x : 0.0; };
   for (std::size_t i = 0; i < n; ++i)
   {
-    state.q[i] = state_interfaces_[state_pos_idx_[i]].get_optional().value_or(0.0);
-    state.dq[i] = state_interfaces_[state_vel_idx_[i]].get_optional().value_or(0.0);
+    state.q[i] = finite_or_zero(state_interfaces_[state_pos_idx_[i]].get_optional().value_or(0.0));
+    state.dq[i] = finite_or_zero(state_interfaces_[state_vel_idx_[i]].get_optional().value_or(0.0));
   }
   if (has_base_)
   {
-    auto v = [&](std::size_t k) { return state_interfaces_[base_idx_[k]].get_optional().value_or(0.0); };
+    auto v = [&](std::size_t k) {
+      return finite_or_zero(state_interfaces_[base_idx_[k]].get_optional().value_or(0.0));
+    };
     state.base_pose = Eigen::Isometry3d::Identity();
     state.base_pose.translation() = Eigen::Vector3d(v(0), v(1), v(2));
     Eigen::Quaterniond q(v(6), v(3), v(4), v(5));  // (w, x, y, z)
@@ -227,7 +235,46 @@ controller_interface::return_type EeStabilizationController::update(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
   const riptide::RobotState state = read_state();
+
+  auto hold_zero = [&]() {
+    for (std::size_t i = 0; i < joints_.size(); ++i)
+    {
+      (void)command_interfaces_[cmd_effort_idx_[i]].set_value(0.0);
+    }
+    return controller_interface::return_type::OK;
+  };
+
+  // Wait for a finite measurement before doing anything: on the first cycles the
+  // hardware may not have written the state interfaces yet.
+  if (!is_finite(state)) { return hold_zero(); }
+
+  // Deferred target capture (see on_activate): grab the EE pose from the first
+  // finite state. Only commit it if the resulting pose is itself finite.
+  if (capture_pending_)
+  {
+    model_->update(state);
+    const Eigen::Isometry3d ee = model_->framePose("ee");
+    if (ee.matrix().allFinite())
+    {
+      target_.pose = ee;
+      capture_pending_ = false;
+      const Eigen::Vector3d p = target_.pose.translation();
+      RCLCPP_INFO(get_node()->get_logger(),
+        "Holding captured EE target at world [%.3f, %.3f, %.3f].", p.x(), p.y(), p.z());
+    }
+    else
+    {
+      return hold_zero();  // model not ready yet; try again next cycle
+    }
+  }
+
   const Eigen::VectorXd tau = control_law_->compute(state, target_, period.seconds());
+  if (!tau.allFinite())
+  {
+    RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+      "Control law produced a non-finite torque; commanding zero this cycle.");
+    return hold_zero();
+  }
   for (std::size_t i = 0; i < joints_.size() && i < static_cast<std::size_t>(tau.size()); ++i)
   {
     (void)command_interfaces_[cmd_effort_idx_[i]].set_value(tau[i]);
