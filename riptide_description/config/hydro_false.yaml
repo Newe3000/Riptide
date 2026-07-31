@@ -1,0 +1,4 @@
+# Disable arm hydrodynamic-drag compensation (nominal rigid-body model).
+ee_stabilization_controller:
+  ros__parameters:
+    hydro_compensation: false

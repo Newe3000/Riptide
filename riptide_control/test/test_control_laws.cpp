@@ -5,14 +5,19 @@
 
 #include <memory>
 
+#include <string>
+#include <vector>
+
 #include <Eigen/Dense>
 #include <gtest/gtest.h>
 #include <rclcpp/rclcpp.hpp>
 
+#include "ament_index_cpp/get_package_share_directory.hpp"
 #include "riptide_control/task_space_impedance.hpp"
 #include "riptide_control/task_space_lqr.hpp"
 #include "riptide_control/task_space_mpc.hpp"
 #include "riptide_dynamics/dynamics_model_interface.hpp"
+#include "riptide_dynamics/pinocchio_model.hpp"
 
 namespace
 {
@@ -216,6 +221,60 @@ TEST_F(ControlLawTest, MpcRespectsInputBound)
   }
   EXPECT_TRUE(tau.allFinite());
   EXPECT_LE(tau[0], 15.0 + 1e-6) << "MPC input bound should cap the task accel";
+}
+
+// ---- hydrodynamics model (real PinocchioModel from the arm URDF) -----------
+
+class HydroTest : public ControlLawTest
+{
+protected:
+  std::string urdf_or_skip()
+  {
+    try {
+      return ament_index_cpp::get_package_share_directory("riptide_description") +
+             "/urdf/fer_arm.urdf";
+    } catch (const std::exception &) {
+      return "";
+    }
+  }
+  const std::vector<std::string> joints_ = {
+    "fer_joint1", "fer_joint2", "fer_joint3", "fer_joint4",
+    "fer_joint5", "fer_joint6", "fer_joint7"};
+  const std::vector<std::string> locked_ = {"fer_finger_joint1", "fer_finger_joint2"};
+};
+
+TEST_F(HydroTest, DragIsDissipativeGatedAndQuadratic)
+{
+  const std::string urdf = urdf_or_skip();
+  if (urdf.empty()) { GTEST_SKIP() << "riptide_description share not found"; }
+
+  riptide::PinocchioModel on(urdf, "fer_hand_tcp", joints_, locked_,
+                             Eigen::Vector3d::Zero(), /*hydro=*/true);
+  riptide::PinocchioModel off(urdf, "fer_hand_tcp", joints_, locked_,
+                              Eigen::Vector3d::Zero(), /*hydro=*/false);
+
+  riptide::RobotState s;
+  s.q = kQRest;
+  s.dq = Eigen::VectorXd::Zero(kN);
+
+  // At rest -> no drag.
+  on.update(s);
+  EXPECT_LT(on.hydroForces(s).norm(), 1e-9);
+
+  // With joint velocity -> nonzero, dissipative, and gated off when disabled.
+  s.dq = Eigen::VectorXd::Constant(kN, 0.5);
+  on.update(s);
+  const Eigen::VectorXd d1 = on.hydroForces(s);
+  EXPECT_GT(d1.norm(), 0.0);
+  EXPECT_GT(s.dq.dot(d1), 0.0) << "generalized drag must dissipate (dq^T D > 0)";
+  off.update(s);
+  EXPECT_LT(off.hydroForces(s).norm(), 1e-12) << "hydro must be gated off";
+
+  // Quadratic form drag => doubling velocity more than doubles the drag.
+  const double n1 = d1.norm();
+  s.dq = Eigen::VectorXd::Constant(kN, 1.0);
+  on.update(s);
+  EXPECT_GT(on.hydroForces(s).norm(), 2.0 * n1);
 }
 
 }  // namespace

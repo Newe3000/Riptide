@@ -103,12 +103,18 @@ def generate_launch_description():
         description_pkg, "config",
         PythonExpression(["'law_' + '", LaunchConfiguration("control_law"), "' + '.yaml'"]),
     ])
+    # Hydrodynamic-drag compensation toggle (hydro:=true|false).
+    hydro_param_file = PathJoinSubstitution([
+        description_pkg, "config",
+        PythonExpression(["'hydro_' + '", LaunchConfiguration("hydro"), "' + '.yaml'"]),
+    ])
     ee_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=[
             "ee_stabilization_controller", "--controller-manager", "/controller_manager",
             "--param-file", law_param_file,
+            "--param-file", hydro_param_file,
         ],
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("controller"), "' == 'ee'"])),
@@ -184,6 +190,12 @@ def generate_launch_description():
             "control_law",
             default_value="impedance",
             description="EE control law when controller:=ee ('impedance' | 'lqr' | 'mpc').",
+        ),
+        DeclareLaunchArgument(
+            "hydro",
+            default_value="false",
+            description="Compensate arm hydrodynamic drag ('true' | 'false'). Off by "
+                        "default: cancelling drag is anti-damping and destabilizes.",
         ),
         DeclareLaunchArgument(
             "disturbance",

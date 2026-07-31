@@ -174,6 +174,20 @@ framing: our controllers are *certainty-equivalence* designs, and the drag $D\su
 actually *helps* (it is passive/dissipative), while the unmodeled coupling is the
 adversary. This is the natural entry point for robust/adaptive extensions.
 
+**Empirical note — do not naively "close" the drag mismatch.** `PinocchioModel`
+can compute the arm's per-link hydrodynamic drag $D(\dot q)\dot q$ (box-approx of
+each link, `hydro_compensation:=true`) and add it to the feedforward. Measured,
+this made things **worse**: EE RMS went from **41 cm to 145 cm** under a 120 N
+current. The reason is structural, not a tuning bug: cancelling drag is
+**anti-damping** — it removes the dissipative $-D\dot q$ term from the closed
+loop — so with any model that over-estimates $D$ (the inertia-box is larger than
+the slender link, $C_d=1$ is high) the net damping goes negative and the arm
+thrashes at speed. The favorable-mismatch principle wins: the drag is a
+stabilizing term you should *keep*, not cancel. The model's legitimate use is
+**prediction** — e.g. inside the MPC horizon, where a more accurate $D$ improves
+the forecast without inserting an anti-damping feedback term. Compensation is
+therefore **off by default**; the model is provided for study and prediction.
+
 ---
 
 ## 2. Baseline: task-space impedance (implemented) and its Lyapunov stability

@@ -81,7 +81,7 @@ def run_combo(law, scenario, args, outdir):
         "ros2", "launch", "riptide_bringup", "sim.launch.py",
         "use_mock_hardware:=false", "controller:=ee", f"control_law:={law}",
         "base_control:=true", "rviz:=false", f"disturbance:={scenario}",
-        f"disturbance_amplitude:={args.amplitude}",
+        f"disturbance_amplitude:={args.amplitude}", f"hydro:={args.hydro}",
     ]
     proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT,
                             start_new_session=True)
@@ -230,6 +230,7 @@ def main(argv=None):
     ap.add_argument("--settle", type=float, default=6.0, help="settle time [s]")
     ap.add_argument("--duration", type=float, default=15.0, help="record window [s]")
     ap.add_argument("--amplitude", type=float, default=80.0, help="disturbance force [N]")
+    ap.add_argument("--hydro", default="true", help="arm drag compensation (true|false)")
     ap.add_argument("--output-dir", default="./riptide_benchmark")
     args = ap.parse_args(argv)
 

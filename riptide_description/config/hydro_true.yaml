@@ -1,0 +1,4 @@
+# Enable arm hydrodynamic-drag compensation (closes the model-plant mismatch).
+ee_stabilization_controller:
+  ros__parameters:
+    hydro_compensation: true

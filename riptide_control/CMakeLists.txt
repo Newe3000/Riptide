@@ -74,7 +74,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_control_laws test/test_control_laws.cpp)
   if(TARGET test_control_laws)
     target_link_libraries(test_control_laws riptide_control Eigen3::Eigen)
-    ament_target_dependencies(test_control_laws rclcpp riptide_dynamics)
+    ament_target_dependencies(test_control_laws rclcpp riptide_dynamics ament_index_cpp)
     set_target_properties(test_control_laws PROPERTIES
       BUILD_RPATH "${PINOCCHIO_ROOT}/lib")
   endif()

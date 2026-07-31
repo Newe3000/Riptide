@@ -1,5 +1,6 @@
 #include "riptide_dynamics/pinocchio_model.hpp"
 
+#include <cmath>
 #include <stdexcept>
 
 #include <pinocchio/algorithm/crba.hpp>
@@ -19,8 +20,10 @@ PinocchioModel::PinocchioModel(
   const std::string & ee_frame,
   const std::vector<std::string> & joint_order,
   const std::vector<std::string> & locked_joints,
-  const Eigen::Vector3d & base_to_arm)
-: mount_t_(base_to_arm)
+  const Eigen::Vector3d & base_to_arm,
+  bool hydro, double fluid_density, double fluid_viscosity, double drag_coefficient)
+: mount_t_(base_to_arm),
+  hydro_(hydro), rho_(fluid_density), mu_(fluid_viscosity), cd_(drag_coefficient)
 {
   pinocchio::Model full;
   pinocchio::urdf::buildModel(urdf_path, full);  // fixed base
@@ -72,6 +75,7 @@ PinocchioModel::PinocchioModel(
   M_ = Eigen::MatrixXd::Zero(model_.nv, model_.nv);
   nle_ = Eigen::VectorXd::Zero(model_.nv);
   J_world_ = Eigen::MatrixXd::Zero(6, model_.nv);
+  hydro_force_ = Eigen::VectorXd::Zero(model_.nv);
 }
 
 void PinocchioModel::update(const RobotState & state)
@@ -100,6 +104,18 @@ void PinocchioModel::update(const RobotState & state)
 
   pinocchio::nonLinearEffects(model_, data_, q, v);
   nle_ = data_.nle;
+
+  // Hydrodynamic drag the arm moves through (closes the mismatch with MuJoCo's
+  // fluid model). Fold it into nonlinear() so every control law compensates it.
+  if (hydro_)
+  {
+    hydro_force_ = computeHydroDrag();
+    nle_ += hydro_force_;
+  }
+  else
+  {
+    hydro_force_.setZero();
+  }
 
   // Compose the fixed-base EE quantities with the measured base pose (world).
   // oMf is the EE in the ARM ROOT (link0) frame; the arm root is mounted at
@@ -130,7 +146,56 @@ Eigen::Isometry3d PinocchioModel::framePose(const std::string & /*frame*/) const
 
 Eigen::VectorXd PinocchioModel::hydroForces(const RobotState & /*state*/) const
 {
-  return Eigen::VectorXd::Zero(model_.nv);
+  return hydro_force_;   // as computed by the last update()
+}
+
+Eigen::VectorXd PinocchioModel::computeHydroDrag() const
+{
+  Eigen::VectorXd tau = Eigen::VectorXd::Zero(model_.nv);
+  Eigen::MatrixXd Ji(6, model_.nv);
+  for (pinocchio::JointIndex i = 1;
+       i < static_cast<pinocchio::JointIndex>(model_.njoints); ++i)
+  {
+    const pinocchio::Inertia & Y = model_.inertias[i];
+    const double m = Y.mass();
+    if (m < 1e-9) { continue; }
+
+    // Equivalent uniform box half-sizes from the link's (diagonal) inertia:
+    //   I_x = m/3 (hy^2 + hz^2), ...  =>  hx^2 = 1.5*sum(I)/m - 3 I_x/m.
+    const Eigen::Matrix3d Ibar = Y.inertia().matrix();
+    const Eigen::Vector3d Id(Ibar(0, 0), Ibar(1, 1), Ibar(2, 2));
+    const double S = 1.5 * Id.sum() / m;
+    Eigen::Vector3d h;
+    for (int k = 0; k < 3; ++k) { h[k] = std::sqrt(std::max(S - 3.0 * Id[k] / m, 0.0)); }
+
+    // Link spatial velocity in the local (joint) frame.
+    const Eigen::Vector3d vl = data_.v[i].linear();
+    const Eigen::Vector3d vw = data_.v[i].angular();
+
+    // Drag as the dissipative D(dq)dq term in the LHS convention
+    //   M ddq + C dq + g + D(dq)dq = tau,
+    // i.e. aligned WITH the link velocity, so adding it to tau cancels the fluid
+    // force f = -D(dq)dq the plant applies. Quadratic (form) + linear (viscous)
+    // on the box faces for translation; a Stokes-like viscous term for rotation.
+    Eigen::Matrix<double, 6, 1> w;
+    for (int k = 0; k < 3; ++k)
+    {
+      const int a = (k + 1) % 3, b = (k + 2) % 3;
+      const double area = 4.0 * h[a] * h[b];                 // face _|_ axis k
+      const double c_quad = 0.5 * rho_ * cd_ * area;
+      const double c_visc = 3.0 * M_PI * mu_ * (h[a] + h[b]);
+      w[k] = (c_quad * std::abs(vl[k]) + c_visc) * vl[k];
+    }
+    const double r = (h[0] + h[1] + h[2]) / 3.0;
+    const double c_rot = 8.0 * M_PI * mu_ * r * r * r;        // Stokes rotational
+    for (int k = 0; k < 3; ++k) { w[3 + k] = c_rot * vw[k]; }
+
+    // Map the local-frame drag wrench to joint torques: tau += J_i,local^T w.
+    Ji.setZero();
+    pinocchio::getJointJacobian(model_, data_, i, pinocchio::LOCAL, Ji);
+    tau += Ji.transpose() * w;
+  }
+  return tau;
 }
 
 }  // namespace riptide

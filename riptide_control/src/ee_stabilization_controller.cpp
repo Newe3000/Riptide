@@ -43,6 +43,15 @@ controller_interface::CallbackReturn EeStabilizationController::on_init()
   // Mount offset: measured base link (auv_base_link) -> arm root (link0). The
   // arm sits on top of the 0.6 m hull, so its root is +0.3 m in z.
   auto_declare<std::vector<double>>("base_to_arm_offset", {0.0, 0.0, 0.3});
+  // Hydrodynamic drag compensation. OFF by default: cancelling the arm's drag is
+  // ANTI-DAMPING (it removes the beneficial damping the water provides), and with
+  // an over-estimating model it destabilizes under fast motion (measured: EE RMS
+  // 41 cm -> 145 cm at a 120 N current). The mismatch is favorable; the hydro
+  // model is kept for study / future MPC prediction. Fluid params match the MJCF.
+  auto_declare<bool>("hydro_compensation", false);
+  auto_declare<double>("fluid_density", 1000.0);
+  auto_declare<double>("fluid_viscosity", 0.0009);
+  auto_declare<double>("drag_coefficient", 1.0);
   // Default: hold whatever EE pose the arm is in at activation (robust demo).
   auto_declare<bool>("capture_target_on_activate", true);
   return controller_interface::CallbackReturn::SUCCESS;
@@ -79,11 +88,15 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
   const auto off = node->get_parameter("base_to_arm_offset").as_double_array();
   const Eigen::Vector3d mount =
     (off.size() == 3) ? Eigen::Vector3d(off[0], off[1], off[2]) : Eigen::Vector3d::Zero();
+  const bool hydro = node->get_parameter("hydro_compensation").as_bool();
+  const double rho = node->get_parameter("fluid_density").as_double();
+  const double mu = node->get_parameter("fluid_viscosity").as_double();
+  const double cd = node->get_parameter("drag_coefficient").as_double();
 
   try
   {
     model_ = std::make_shared<riptide::PinocchioModel>(
-      arm_urdf, ee_frame, joints_, locked, mount);
+      arm_urdf, ee_frame, joints_, locked, mount, hydro, rho, mu, cd);
   }
   catch (const std::exception & e)
   {
@@ -129,7 +142,8 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
     "/riptide/control_debug", rclcpp::SystemDefaultsQoS());
 
   RCLCPP_INFO(node->get_logger(),
-    "EeStabilizationController configured: %zu joints, law '%s'.", joints_.size(), law.c_str());
+    "EeStabilizationController configured: %zu joints, law '%s', hydro_compensation=%s.",
+    joints_.size(), law.c_str(), hydro ? "on" : "off");
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
