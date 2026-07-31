@@ -20,4 +20,16 @@
       but with provably optimal task gains. See docs/control_theory.md 3.
     </description>
   </class>
+  <class
+    name="riptide_control/TaskSpaceMpc"
+    type="riptide_control::TaskSpaceMpc"
+    base_class_type="riptide::IControlLaw">
+    <description>
+      Operational-space MPC: receding-horizon constrained optimal control on the
+      feedback-linearized task double integrator, with input bounds and a DARE
+      terminal cost (stabilizing per Mayne et al. 2000). Per-axis condensed QPs
+      solved by a warm-started projected fast-gradient method (no external QP
+      solver). See docs/control_theory.md 4.
+    </description>
+  </class>
 </library>

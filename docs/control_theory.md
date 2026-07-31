@@ -503,11 +503,20 @@ experiment the rig can run.
 | $\tau_{\mathrm{ext}}$ | `/riptide/disturbance` → `xfrc_applied` (`mujoco_system.cpp`) |
 | Impedance law (8) | `riptide_control/TaskSpaceImpedance` |
 | Allocation $A$, eq. (5) | `BaseThrusterController::on_configure` (pinv), `update` (saturate) |
-| LQR gain $K$ (planned) | new `IControlLaw` plugin: solve CARE/DARE offline, apply (13) |
-| MPC QP (16) (planned) | new `IControlLaw` plugin: build/solve the QP each cycle (OSQP) |
+| LQR gain $K$, eq. (13)–(14) | `riptide_control/TaskSpaceLqr` (closed-form CARE gains) |
+| MPC QP (16) | `riptide_control/TaskSpaceMpc` (per-axis condensed QP, DARE terminal cost, fast-gradient solve) |
 
-Adding LQR or MPC is a **new `IControlLaw` plugin** — the seam, dynamics
-(`PinocchioModel`), and the state/target structs are already in place.
+Each control approach is a **`IControlLaw` plugin** sharing one seam, one
+dynamics model (`PinocchioModel`), and the same state/target structs — selected
+at runtime with `control_law:={impedance,lqr,mpc}`.
+
+**Implementation note (MPC).** The plugin imposes **input** constraints
+($|w_k|\le \bar w$) rather than the polytopic **torque** constraint
+$|J^\top\Lambda w + h|\le\bar\tau$; the latter couples the axes and would need a
+general QP solver. The per-axis input box keeps the six QPs decoupled and
+solvable in-loop by fast gradient, with the final torque clamp as the hard
+safety limit. Adding true torque/joint-limit constraints (a single coupled QP)
+is the natural next increment.
 
 ---
 

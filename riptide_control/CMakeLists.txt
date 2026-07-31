@@ -31,7 +31,8 @@ add_library(riptide_control SHARED
   src/ee_stabilization_controller.cpp
   src/base_thruster_controller.cpp
   src/task_space_impedance.cpp
-  src/task_space_lqr.cpp)
+  src/task_space_lqr.cpp
+  src/task_space_mpc.cpp)
 target_include_directories(riptide_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)

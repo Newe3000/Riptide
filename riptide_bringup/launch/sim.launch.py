@@ -178,7 +178,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "control_law",
             default_value="impedance",
-            description="EE control law when controller:=ee ('impedance' | 'lqr').",
+            description="EE control law when controller:=ee ('impedance' | 'lqr' | 'mpc').",
         ),
         DeclareLaunchArgument(
             "disturbance",

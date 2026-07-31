@@ -70,8 +70,8 @@ ros2 launch riptide_bringup sim.launch.py \
 ```
 
 Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
-`ee` task-space / `none`), `control_law` (`impedance` / `lqr` — the EE law when
-`controller:=ee`), `base_control` (true/false — run the hull-thruster base
+`ee` task-space / `none`), `control_law` (`impedance` / `lqr` / `mpc` — the EE
+law when `controller:=ee`), `base_control` (true/false — run the hull-thruster base
 dynamic-positioning controller), `rviz` (true/false), `disturbance`
 (none/steady_current/sinusoid/impulse). Tune the disturbance live, e.g.
 `ros2 param set /disturbance_generator amplitude 20.0`.
@@ -83,7 +83,12 @@ weights — see [`docs/control_theory.md`](docs/control_theory.md) §3):
 ```bash
 ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=ee control_law:=impedance disturbance:=sinusoid
 ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=ee control_law:=lqr       disturbance:=sinusoid
+ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=ee control_law:=mpc       disturbance:=sinusoid
 ```
+
+`mpc` (§4 of the notes) adds input constraints + a receding horizon on top of the
+LQR cost, solved as per-axis QPs each cycle by a self-contained fast-gradient
+method (no external solver); its DARE terminal cost makes it provably stabilizing.
 
 To see what the thrusters buy you, compare the base drift with and without them:
 
