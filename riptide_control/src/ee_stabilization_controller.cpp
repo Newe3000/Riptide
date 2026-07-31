@@ -39,6 +39,9 @@ controller_interface::CallbackReturn EeStabilizationController::on_init()
   auto_declare<std::string>("control_law", "riptide_control/TaskSpaceImpedance");
   auto_declare<std::vector<double>>("target_position", {0.5, 0.0, 0.6});
   auto_declare<std::vector<double>>("target_orientation", {1.0, 0.0, 0.0, 0.0});  // xyzw
+  // Mount offset: measured base link (auv_base_link) -> arm root (link0). The
+  // arm sits on top of the 0.6 m hull, so its root is +0.3 m in z.
+  auto_declare<std::vector<double>>("base_to_arm_offset", {0.0, 0.0, 0.3});
   // Default: hold whatever EE pose the arm is in at activation (robust demo).
   auto_declare<bool>("capture_target_on_activate", true);
   return controller_interface::CallbackReturn::SUCCESS;
@@ -72,9 +75,14 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
     return controller_interface::CallbackReturn::ERROR;
   }
 
+  const auto off = node->get_parameter("base_to_arm_offset").as_double_array();
+  const Eigen::Vector3d mount =
+    (off.size() == 3) ? Eigen::Vector3d(off[0], off[1], off[2]) : Eigen::Vector3d::Zero();
+
   try
   {
-    model_ = std::make_shared<riptide::PinocchioModel>(arm_urdf, ee_frame, joints_, locked);
+    model_ = std::make_shared<riptide::PinocchioModel>(
+      arm_urdf, ee_frame, joints_, locked, mount);
   }
   catch (const std::exception & e)
   {

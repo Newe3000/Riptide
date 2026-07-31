@@ -18,7 +18,9 @@ PinocchioModel::PinocchioModel(
   const std::string & urdf_path,
   const std::string & ee_frame,
   const std::vector<std::string> & joint_order,
-  const std::vector<std::string> & locked_joints)
+  const std::vector<std::string> & locked_joints,
+  const Eigen::Vector3d & base_to_arm)
+: mount_t_(base_to_arm)
 {
   pinocchio::Model full;
   pinocchio::urdf::buildModel(urdf_path, full);  // fixed base
@@ -38,6 +40,13 @@ PinocchioModel::PinocchioModel(
   {
     pinocchio::buildReducedModel(full, lock, q_ref, model_);
   }
+  // Match the plant: the AUV floats in neutral buoyancy, modelled as zero
+  // gravity in the MJCF. Pinocchio defaults to -9.81 m/s^2, so leaving it would
+  // make nonLinearEffects() return a spurious gravity-compensation torque that
+  // the control laws add with nothing in the plant to cancel it (the arm drifts
+  // "up"). Zero it so nonlinear() = C(q,dq)dq only, consistent with the sim.
+  model_.gravity.linear(Eigen::Vector3d::Zero());
+
   data_ = pinocchio::Data(model_);
 
   if (!model_.existFrame(ee_frame))
@@ -93,10 +102,15 @@ void PinocchioModel::update(const RobotState & state)
   nle_ = data_.nle;
 
   // Compose the fixed-base EE quantities with the measured base pose (world).
-  const pinocchio::SE3 & oMf = data_.oMf[ee_id_];   // EE in base frame
+  // oMf is the EE in the ARM ROOT (link0) frame; the arm root is mounted at
+  // base_pose ∘ mount_t_ (link0 sits on top of the hull), so add the mount
+  // offset before rotating into world. The mount is a pure, constant translation
+  // (no rotation), so the Jacobian mapping is unchanged.
+  const pinocchio::SE3 & oMf = data_.oMf[ee_id_];   // EE in arm-root frame
   const Eigen::Matrix3d R_wb = state.base_pose.rotation();
   ee_world_.linear() = R_wb * oMf.rotation();
-  ee_world_.translation() = state.base_pose.translation() + R_wb * oMf.translation();
+  ee_world_.translation() =
+    state.base_pose.translation() + R_wb * (mount_t_ + oMf.translation());
 
   // LOCAL_WORLD_ALIGNED is expressed in a base-aligned world frame; rotate the
   // linear and angular blocks by R_wb to get the true world Jacobian.

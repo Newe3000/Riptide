@@ -25,11 +25,16 @@ public:
   /// \param ee_frame    end-effector frame name (e.g. "fer_hand_tcp").
   /// \param joint_order actuated joint names, in the order the controller uses.
   /// \param locked_joints joints to freeze (e.g. the fingers).
+  /// \param base_to_arm constant translation from the measured base link
+  ///        (auv_base_link) to the arm root (link0) — the mount offset. Without
+  ///        it the composed EE pose is wrong by this amount (the arm sits on top
+  ///        of the hull, not at its centre).
   PinocchioModel(
     const std::string & urdf_path,
     const std::string & ee_frame,
     const std::vector<std::string> & joint_order,
-    const std::vector<std::string> & locked_joints);
+    const std::vector<std::string> & locked_joints,
+    const Eigen::Vector3d & base_to_arm = Eigen::Vector3d::Zero());
 
   void update(const RobotState & state) override;
 
@@ -49,6 +54,9 @@ private:
   // Maps controller joint index -> pinocchio q / v index.
   std::vector<int> q_index_;
   std::vector<int> v_index_;
+
+  // Constant mount offset: base link (auv_base_link) -> arm root (link0).
+  Eigen::Vector3d mount_t_{Eigen::Vector3d::Zero()};
 
   // Latest results (world frame for EE quantities).
   Eigen::MatrixXd M_;        ///< joint-space inertia (nv x nv)
