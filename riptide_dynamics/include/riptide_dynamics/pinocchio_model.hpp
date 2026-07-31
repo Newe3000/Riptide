@@ -58,6 +58,10 @@ public:
 
   std::size_t nJoints() const { return static_cast<std::size_t>(model_.nv); }
 
+  /// Joint position limits (from the URDF), in the controller's joint order.
+  const Eigen::VectorXd & lowerLimits() const { return q_lower_; }
+  const Eigen::VectorXd & upperLimits() const { return q_upper_; }
+
 private:
   pinocchio::Model model_;
   pinocchio::Data data_;
@@ -66,6 +70,9 @@ private:
   // Maps controller joint index -> pinocchio q / v index.
   std::vector<int> q_index_;
   std::vector<int> v_index_;
+
+  // Joint position limits in controller order (from the URDF).
+  Eigen::VectorXd q_lower_, q_upper_;
 
   // Constant mount offset: base link (auv_base_link) -> arm root (link0).
   Eigen::Vector3d mount_t_{Eigen::Vector3d::Zero()};

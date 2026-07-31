@@ -1,5 +1,6 @@
 #include "riptide_control/ee_stabilization_controller.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -39,7 +40,13 @@ controller_interface::CallbackReturn EeStabilizationController::on_init()
   auto_declare<std::string>("base_sensor", "auv_base");
   auto_declare<std::string>("control_law", "riptide_control/TaskSpaceImpedance");
   auto_declare<std::vector<double>>("target_position", {0.5, 0.0, 0.6});
-  auto_declare<std::vector<double>>("target_orientation", {1.0, 0.0, 0.0, 0.0});  // xyzw
+  auto_declare<std::vector<double>>("target_orientation", {0.0, 0.0, 0.0, 1.0});  // xyzw (identity)
+  // Joint-limit avoidance (repulsive torque near the limits; on top of any law).
+  auto_declare<bool>("joint_limit_avoidance", true);
+  auto_declare<double>("limit_buffer", 0.2);    // rad from a limit before it engages
+  auto_declare<double>("limit_gain", 40.0);     // Nm at the limit
+  auto_declare<double>("limit_damping", 2.0);   // Nm.s/rad, damps motion into a limit
+  auto_declare<std::vector<double>>("max_effort", {87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0});
   // Mount offset: measured base link (auv_base_link) -> arm root (link0). The
   // arm sits on top of the 0.6 m hull, so its root is +0.3 m in z.
   auto_declare<std::vector<double>>("base_to_arm_offset", {0.0, 0.0, 0.3});
@@ -93,16 +100,28 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
   const double mu = node->get_parameter("fluid_viscosity").as_double();
   const double cd = node->get_parameter("drag_coefficient").as_double();
 
+  std::shared_ptr<riptide::PinocchioModel> pin_model;
   try
   {
-    model_ = std::make_shared<riptide::PinocchioModel>(
+    pin_model = std::make_shared<riptide::PinocchioModel>(
       arm_urdf, ee_frame, joints_, locked, mount, hydro, rho, mu, cd);
+    model_ = pin_model;
   }
   catch (const std::exception & e)
   {
     RCLCPP_ERROR(node->get_logger(), "Failed to build Pinocchio model: %s", e.what());
     return controller_interface::CallbackReturn::ERROR;
   }
+
+  // Joint-limit avoidance setup (limits come from the URDF via the model).
+  jla_enabled_ = node->get_parameter("joint_limit_avoidance").as_bool();
+  jla_buffer_ = node->get_parameter("limit_buffer").as_double();
+  jla_gain_ = node->get_parameter("limit_gain").as_double();
+  jla_damping_ = node->get_parameter("limit_damping").as_double();
+  q_lower_ = pin_model->lowerLimits();
+  q_upper_ = pin_model->upperLimits();
+  const auto me = node->get_parameter("max_effort").as_double_array();
+  max_effort_ = Eigen::Map<const Eigen::VectorXd>(me.data(), static_cast<Eigen::Index>(me.size()));
 
   // Target EE pose (world).
   const auto tp = node->get_parameter("target_position").as_double_array();
@@ -260,6 +279,38 @@ riptide::RobotState EeStabilizationController::read_state() const
   return state;
 }
 
+Eigen::VectorXd EeStabilizationController::jointLimitAvoidance(
+  const Eigen::VectorXd & q, const Eigen::VectorXd & dq) const
+{
+  const Eigen::Index n = q.size();
+  Eigen::VectorXd tau = Eigen::VectorXd::Zero(n);
+  if (!jla_enabled_ || q_lower_.size() != n || q_upper_.size() != n || jla_buffer_ <= 0.0)
+  {
+    return tau;
+  }
+  for (Eigen::Index i = 0; i < n; ++i)
+  {
+    // Near the UPPER limit: push toward smaller q, growing quadratically inside
+    // the buffer; damp velocity heading further into the limit.
+    const double pen_u = q[i] - (q_upper_[i] - jla_buffer_);
+    if (pen_u > 0.0)
+    {
+      const double r = pen_u / jla_buffer_;                 // 0 at buffer edge, 1 at limit
+      tau[i] -= jla_gain_ * r * r;
+      if (dq[i] > 0.0) { tau[i] -= jla_damping_ * dq[i] * std::min(r, 1.0); }
+    }
+    // Near the LOWER limit: push toward larger q.
+    const double pen_l = (q_lower_[i] + jla_buffer_) - q[i];
+    if (pen_l > 0.0)
+    {
+      const double r = pen_l / jla_buffer_;
+      tau[i] += jla_gain_ * r * r;
+      if (dq[i] < 0.0) { tau[i] -= jla_damping_ * dq[i] * std::min(r, 1.0); }
+    }
+  }
+  return tau;
+}
+
 controller_interface::return_type EeStabilizationController::update(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
@@ -298,7 +349,7 @@ controller_interface::return_type EeStabilizationController::update(
   }
 
   const auto t_start = std::chrono::steady_clock::now();
-  const Eigen::VectorXd tau = control_law_->compute(state, target_, period.seconds());
+  Eigen::VectorXd tau = control_law_->compute(state, target_, period.seconds());
   const double solve_ms =
     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_start).count();
 
@@ -308,6 +359,14 @@ controller_interface::return_type EeStabilizationController::update(
       "Control law produced a non-finite torque; commanding zero this cycle.");
     return hold_zero();
   }
+
+  // Joint-limit avoidance on top of any control law, then a final torque clamp.
+  tau += jointLimitAvoidance(state.q, state.dq);
+  for (Eigen::Index i = 0; i < tau.size() && i < max_effort_.size(); ++i)
+  {
+    tau[i] = std::clamp(tau[i], -max_effort_[i], max_effort_[i]);
+  }
+
   for (std::size_t i = 0; i < joints_.size() && i < static_cast<std::size_t>(tau.size()); ++i)
   {
     (void)command_interfaces_[cmd_effort_idx_[i]].set_value(tau[i]);

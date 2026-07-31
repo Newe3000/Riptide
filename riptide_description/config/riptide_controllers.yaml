@@ -64,21 +64,31 @@ ee_stabilization_controller:
     locked_joints: [fer_finger_joint1, fer_finger_joint2]
     base_sensor: auv_base
     control_law: riptide_control/TaskSpaceImpedance
-    # World-frame EE target to hold while the base is disturbed.
-    target_position: [0.55, 0.0, 1.9]
-    target_orientation: [1.0, 0.0, 0.0, 0.0]   # xyzw
-    # Cartesian impedance gains (read by the control-law plugin).
+    # Joint-limit avoidance: repulsive torque that engages within `limit_buffer`
+    # of a limit and grows quadratically toward it (on top of any control law).
+    joint_limit_avoidance: true
+    limit_buffer: 0.35        # rad (~20 deg) before a limit
+    limit_gain: 80.0          # Nm at the limit (comparable to joint torque limits)
+    limit_damping: 4.0        # Nm.s/rad, damps motion into a limit
+    # Explicit world-frame EE target POSE (position + orientation). By default
+    # capture_target_on_activate holds whatever pose the arm starts in; set it
+    # false to command this pose instead.
+    capture_target_on_activate: true
+    target_position: [0.45, 0.0, 1.9]
+    target_orientation: [0.0, 0.0, 0.0, 1.0]   # xyzw (identity); used when capture is false
+    # Cartesian impedance gains. Orientation is now controlled as stiffly as
+    # position (was ~4x softer, so it visibly drifted under disturbance).
     impedance.kp_pos: [800.0, 800.0, 800.0]
-    impedance.kp_ori: [60.0, 60.0, 60.0]
+    impedance.kp_ori: [300.0, 300.0, 300.0]
     impedance.kd_pos: [80.0, 80.0, 80.0]
-    impedance.kd_ori: [12.0, 12.0, 12.0]
+    impedance.kd_ori: [35.0, 35.0, 35.0]
     impedance.null_kp: 8.0
     impedance.null_kd: 2.0
     # LQR law weights (used when control_law = riptide_control/TaskSpaceLqr).
     # Optimal task gains are derived from these: Kp=sqrt(q/r), Kd=sqrt(2*Kp+qd/r).
     # See docs/control_theory.md 3.3. Switch laws with control_law:=lqr.
     lqr.q_pos: [640000.0, 640000.0, 640000.0]   # -> Kp_pos = 800  (matches impedance)
-    lqr.q_ori: [3600.0, 3600.0, 3600.0]         # -> Kp_ori = 60
+    lqr.q_ori: [90000.0, 90000.0, 90000.0]      # -> Kp_ori = 300 (orientation held stiffly)
     lqr.qd_pos: [0.0, 0.0, 0.0]
     lqr.qd_ori: [0.0, 0.0, 0.0]
     lqr.r_pos: [1.0, 1.0, 1.0]
@@ -92,7 +102,7 @@ ee_stabilization_controller:
     mpc.sample_time: 0.004        # must match controller_manager update_rate (250 Hz)
     mpc.max_iter: 40
     mpc.q_pos: [640000.0, 640000.0, 640000.0]
-    mpc.q_ori: [3600.0, 3600.0, 3600.0]
+    mpc.q_ori: [90000.0, 90000.0, 90000.0]   # -> Kp_ori = 300 (orientation held stiffly)
     mpc.qd_pos: [0.0, 0.0, 0.0]
     mpc.qd_ori: [0.0, 0.0, 0.0]
     mpc.r_pos: [1.0, 1.0, 1.0]

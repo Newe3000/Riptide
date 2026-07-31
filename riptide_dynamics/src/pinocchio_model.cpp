@@ -58,9 +58,12 @@ PinocchioModel::PinocchioModel(
   }
   ee_id_ = model_.getFrameId(ee_frame);
 
-  // Resolve the controller's joint order to pinocchio q/v indices.
+  // Resolve the controller's joint order to pinocchio q/v indices, and pull the
+  // position limits (from the URDF) in that same order.
   q_index_.resize(joint_order.size());
   v_index_.resize(joint_order.size());
+  q_lower_.resize(joint_order.size());
+  q_upper_.resize(joint_order.size());
   for (std::size_t i = 0; i < joint_order.size(); ++i)
   {
     if (!model_.existJointName(joint_order[i]))
@@ -70,6 +73,8 @@ PinocchioModel::PinocchioModel(
     const auto jid = model_.getJointId(joint_order[i]);
     q_index_[i] = model_.idx_qs[jid];
     v_index_[i] = model_.idx_vs[jid];
+    q_lower_[i] = model_.lowerPositionLimit[q_index_[i]];
+    q_upper_[i] = model_.upperPositionLimit[q_index_[i]];
   }
 
   M_ = Eigen::MatrixXd::Zero(model_.nv, model_.nv);

@@ -64,6 +64,18 @@ private:
   std::string control_law_name_;
   std::uint64_t cycle_{0};
 
+  // Joint-limit avoidance: a repulsive torque that switches on only within
+  // `jla_buffer_` of a limit and grows toward it, applied on top of any law.
+  bool jla_enabled_{true};
+  double jla_buffer_{0.2};    ///< activation distance from the limit [rad]
+  double jla_gain_{40.0};     ///< repulsive strength at the limit [Nm]
+  double jla_damping_{2.0};   ///< damping of motion into the limit [Nm.s/rad]
+  Eigen::VectorXd q_lower_, q_upper_;   ///< joint position limits (controller order)
+  Eigen::VectorXd max_effort_;          ///< final per-joint torque clamp [Nm]
+
+  Eigen::VectorXd jointLimitAvoidance(
+    const Eigen::VectorXd & q, const Eigen::VectorXd & dq) const;
+
   // The EE hold target is captured on the first update() cycle whose measured
   // state is finite, not in on_activate(): at activation the hardware's first
   // read() may not have run yet, so the state interfaces still read NaN and a
