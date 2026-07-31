@@ -111,6 +111,14 @@ ee_stabilization_controller:
     mpc.w_max_ori: [40.0, 40.0, 40.0]   # [rad/s^2]
     mpc.null_kp: 8.0
     mpc.null_kd: 2.0
+    # Template law (blank starting point; control_law:=template). Copy this block
+    # under a new prefix when you clone template_control_law into your own law.
+    template.kp_pos: [800.0, 800.0, 800.0]
+    template.kp_ori: [300.0, 300.0, 300.0]
+    template.kd_pos: [80.0, 80.0, 80.0]
+    template.kd_ori: [35.0, 35.0, 35.0]
+    template.null_kp: 8.0
+    template.null_kd: 2.0
 
 base_thruster_controller:
   ros__parameters:

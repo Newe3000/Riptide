@@ -32,4 +32,13 @@
       solver). See docs/control_theory.md 4.
     </description>
   </class>
+  <class
+    name="riptide_control/TemplateControlLaw"
+    type="riptide_control::TemplateControlLaw"
+    base_class_type="riptide::IControlLaw">
+    <description>
+      Blank starting point for a new control approach: copy the template_control_law
+      files, put your control math in compute(), and select with control_law:=template.
+    </description>
+  </class>
 </library>

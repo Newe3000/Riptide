@@ -1,0 +1,6 @@
+# Law selector (passed to the ee_stabilization_controller spawner via
+# --param-file). Selects the blank TemplateControlLaw starting point. Gains live
+# in riptide_controllers.yaml under `template.*`. Run with control_law:=template.
+ee_stabilization_controller:
+  ros__parameters:
+    control_law: riptide_control/TemplateControlLaw
