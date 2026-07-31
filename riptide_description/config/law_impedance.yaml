@@ -1,0 +1,6 @@
+# Law selector (passed to the ee_stabilization_controller spawner via
+# --param-file). Selects the Cartesian impedance control law. The gains live in
+# riptide_controllers.yaml under `impedance.*`.
+ee_stabilization_controller:
+  ros__parameters:
+    control_law: riptide_control/TaskSpaceImpedance

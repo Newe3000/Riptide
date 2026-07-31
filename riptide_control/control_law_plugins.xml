@@ -9,4 +9,15 @@
       Because the EE pose uses the measured base pose, base motion is rejected.
     </description>
   </class>
+  <class
+    name="riptide_control/TaskSpaceLqr"
+    type="riptide_control::TaskSpaceLqr"
+    base_class_type="riptide::IControlLaw">
+    <description>
+      Operational-space LQR: feedback-linearizes the task dynamics to a double
+      integrator and applies the infinite-horizon LQR whose closed-form CARE
+      gains follow from the cost weights (Q, R). Same seam as TaskSpaceImpedance,
+      but with provably optimal task gains. See docs/control_theory.md 3.
+    </description>
+  </class>
 </library>

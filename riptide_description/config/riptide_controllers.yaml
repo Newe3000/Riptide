@@ -74,6 +74,17 @@ ee_stabilization_controller:
     impedance.kd_ori: [12.0, 12.0, 12.0]
     impedance.null_kp: 8.0
     impedance.null_kd: 2.0
+    # LQR law weights (used when control_law = riptide_control/TaskSpaceLqr).
+    # Optimal task gains are derived from these: Kp=sqrt(q/r), Kd=sqrt(2*Kp+qd/r).
+    # See docs/control_theory.md 3.3. Switch laws with control_law:=lqr.
+    lqr.q_pos: [640000.0, 640000.0, 640000.0]   # -> Kp_pos = 800  (matches impedance)
+    lqr.q_ori: [3600.0, 3600.0, 3600.0]         # -> Kp_ori = 60
+    lqr.qd_pos: [0.0, 0.0, 0.0]
+    lqr.qd_ori: [0.0, 0.0, 0.0]
+    lqr.r_pos: [1.0, 1.0, 1.0]
+    lqr.r_ori: [1.0, 1.0, 1.0]
+    lqr.null_kp: 8.0
+    lqr.null_kd: 2.0
 
 base_thruster_controller:
   ros__parameters:

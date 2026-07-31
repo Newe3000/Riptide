@@ -70,10 +70,20 @@ ros2 launch riptide_bringup sim.launch.py \
 ```
 
 Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
-`ee` task-space / `none`), `base_control` (true/false — run the hull-thruster
-base dynamic-positioning controller), `rviz` (true/false), `disturbance`
+`ee` task-space / `none`), `control_law` (`impedance` / `lqr` — the EE law when
+`controller:=ee`), `base_control` (true/false — run the hull-thruster base
+dynamic-positioning controller), `rviz` (true/false), `disturbance`
 (none/steady_current/sinusoid/impulse). Tune the disturbance live, e.g.
 `ros2 param set /disturbance_generator amplitude 20.0`.
+
+The EE control law is a hot-swappable `IControlLaw` plugin. Compare the Cartesian
+impedance law against the operational-space LQR (optimal task gains from the cost
+weights — see [`docs/control_theory.md`](docs/control_theory.md) §3):
+
+```bash
+ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=ee control_law:=impedance disturbance:=sinusoid
+ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=ee control_law:=lqr       disturbance:=sinusoid
+```
 
 To see what the thrusters buy you, compare the base drift with and without them:
 

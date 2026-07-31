@@ -96,11 +96,20 @@ def generate_launch_description():
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("controller"), "' == 'pd'"])),
     )
-    # Task-space EE stabilization (Pinocchio + impedance) — rejects base motion.
+    # Task-space EE stabilization (Pinocchio). The control law (impedance | lqr)
+    # is selected by a small per-law param file passed to the spawner, which
+    # overrides `control_law` on the controller — hot-swappable per the design.
+    law_param_file = PathJoinSubstitution([
+        description_pkg, "config",
+        PythonExpression(["'law_' + '", LaunchConfiguration("control_law"), "' + '.yaml'"]),
+    ])
     ee_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["ee_stabilization_controller", "--controller-manager", "/controller_manager"],
+        arguments=[
+            "ee_stabilization_controller", "--controller-manager", "/controller_manager",
+            "--param-file", law_param_file,
+        ],
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("controller"), "' == 'ee'"])),
     )
@@ -165,6 +174,11 @@ def generate_launch_description():
             "base_control",
             default_value="true",
             description="Run the hull-thruster base dynamic-positioning controller.",
+        ),
+        DeclareLaunchArgument(
+            "control_law",
+            default_value="impedance",
+            description="EE control law when controller:=ee ('impedance' | 'lqr').",
         ),
         DeclareLaunchArgument(
             "disturbance",
