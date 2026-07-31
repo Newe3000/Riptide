@@ -24,6 +24,8 @@
       dynamics="${xacro.load_yaml('$(find franka_description)/robots/' + robot_type + '/dynamics.yaml')}"
       hand="true"
       ee_id="franka_hand"
+      tcp_xyz="0 0 0.1034"
+      tcp_rpy="0 0 0"
       gazebo="false"
       ros2_control="false"
       with_sc="false"
