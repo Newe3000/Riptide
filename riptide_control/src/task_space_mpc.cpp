@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "pluginlib/class_list_macros.hpp"
+#include "riptide_control/operational_space.hpp"
 
 namespace riptide_control
 {
@@ -177,51 +178,21 @@ Eigen::VectorXd TaskSpaceMpc::compute(
 {
   model_->update(state);
 
-  const Eigen::Isometry3d X = model_->framePose("ee");
-  const Eigen::MatrixXd J = model_->jacobian("ee");
-  const Eigen::MatrixXd & M = model_->massMatrix();
-  const Eigen::Index n = J.cols();
+  const Eigen::Matrix<double, 6, 1> x_err =
+    task_pose_error(model_->framePose("ee"), target.pose);
+  const Eigen::Matrix<double, 6, 1> v_ee = model_->jacobian("ee") * state.dq;
 
-  // Task error x_err = x_d - x (world); e = x - x_d = -x_err.
-  Eigen::Matrix<double, 6, 1> x_err;
-  x_err.head<3>() = target.pose.translation() - X.translation();
-  const Eigen::Matrix3d R_err = target.pose.rotation() * X.rotation().transpose();
-  const Eigen::AngleAxisd aa(R_err);
-  x_err.tail<3>() = aa.angle() * aa.axis();
-
-  const Eigen::Matrix<double, 6, 1> v_ee = J * state.dq;   // e_dot per axis
-
-  // Per-axis receding-horizon solve -> commanded task acceleration w.
+  // Per-axis receding-horizon solve -> commanded task acceleration w. z0 = [e; e_dot]
+  // with e = x - x_d = -x_err. Then map w through the shared operational-space law.
   Eigen::Matrix<double, 6, 1> w;
   for (int a = 0; a < 6; ++a)
   {
     w[a] = solve_axis(axis_[a], -x_err[a], v_ee[a]);
   }
 
-  // Operational-space mapping (identical to TaskSpaceLqr): tau = J^T (Lambda w)
-  // + nonlinear + dynamically-consistent nullspace posture.
-  const Eigen::MatrixXd Minv = M.inverse();
-  const Eigen::MatrixXd Lambda =
-    (J * Minv * J.transpose() + jacobian_damping_ * Eigen::MatrixXd::Identity(6, 6)).inverse();
-
-  Eigen::VectorXd tau = J.transpose() * (Lambda * w);
-
-  const Eigen::MatrixXd Jbar_T = Lambda * J * Minv;                    // 6 x n
-  const Eigen::MatrixXd N = Eigen::MatrixXd::Identity(n, n) - J.transpose() * Jbar_T;
-  if (q_rest_.size() == n)
-  {
-    const Eigen::VectorXd tau_posture = null_kp_ * (q_rest_ - state.q) - null_kd_ * state.dq;
-    tau += N * tau_posture;
-  }
-
-  tau += model_->nonlinear();
-
-  for (Eigen::Index i = 0; i < n; ++i)
-  {
-    const double lim = (i < max_effort_.size()) ? max_effort_[i] : 1e9;
-    tau[i] = std::clamp(tau[i], -lim, lim);
-  }
-  return tau;
+  return operational_space_torque(
+    *model_, w, state.q, state.dq, q_rest_, null_kp_, null_kd_,
+    jacobian_damping_, max_effort_);
 }
 
 void TaskSpaceMpc::reset()

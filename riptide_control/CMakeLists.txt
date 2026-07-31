@@ -5,6 +5,12 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
+# Default to an optimized build (Eigen/Pinocchio are ~10-50x slower without it,
+# and -DNDEBUG disables Eigen's runtime asserts). Override with -DCMAKE_BUILD_TYPE.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(controller_interface REQUIRED)
@@ -62,4 +68,16 @@ ament_export_libraries(riptide_control)
 ament_export_dependencies(
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
   Eigen3 riptide_dynamics riptide_msgs)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_control_laws test/test_control_laws.cpp)
+  if(TARGET test_control_laws)
+    target_link_libraries(test_control_laws riptide_control Eigen3::Eigen)
+    ament_target_dependencies(test_control_laws rclcpp riptide_dynamics)
+    set_target_properties(test_control_laws PROPERTIES
+      BUILD_RPATH "${PINOCCHIO_ROOT}/lib")
+  endif()
+endif()
+
 ament_package()

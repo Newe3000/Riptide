@@ -10,13 +10,14 @@
 namespace riptide_control
 {
 
-/// Operational-space (Cartesian impedance) control law:
-///   F   = Kp * x_err - Kd * (J * dq)          [6-D task-space wrench]
-///   tau = J^T F + N (kn (q_rest - q) - dn dq) + nonlinear
-/// where x_err is the world-frame EE pose error and N projects a posture task
-/// into the redundant nullspace. Because the EE pose is computed from the
-/// measured floating-base pose, base motion appears as x_err and is rejected —
-/// this is the control law that stabilizes the EE under disturbance.
+/// Inertia-shaped Cartesian impedance control law (Ott 2008, Khatib OSC):
+///   a_des = Kp * x_err - Kd * (J * dq)         [desired task acceleration]
+///   tau   = J^T (Lambda a_des) + N posture + nonlinear
+/// (shared operational_space_torque()), so the EE presents a decoupled
+/// second-order impedance x_ddot + Kd x_dot + Kp x_err = 0. Because the EE pose
+/// is computed from the measured floating-base pose, base motion appears as
+/// x_err and is rejected. Structurally identical to TaskSpaceLqr — the two
+/// differ only in gain design (hand-set physical impedance vs CARE-optimal).
 class TaskSpaceImpedance : public riptide::IControlLaw
 {
 public:

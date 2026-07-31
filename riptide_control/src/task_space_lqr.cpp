@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "pluginlib/class_list_macros.hpp"
+#include "riptide_control/operational_space.hpp"
 
 namespace riptide_control
 {
@@ -89,56 +90,17 @@ Eigen::VectorXd TaskSpaceLqr::compute(
 {
   model_->update(state);
 
-  const Eigen::Isometry3d X = model_->framePose("ee");   // world EE pose
-  const Eigen::MatrixXd J = model_->jacobian("ee");       // 6 x n (world)
-  const Eigen::MatrixXd & M = model_->massMatrix();        // n x n
-  const Eigen::Index n = J.cols();
-
-  // Task-space error e = x - x_d, expressed as x_err = -e = x_d - x (world).
-  Eigen::Matrix<double, 6, 1> x_err;
-  x_err.head<3>() = target.pose.translation() - X.translation();
-  const Eigen::Matrix3d R_err = target.pose.rotation() * X.rotation().transpose();
-  const Eigen::AngleAxisd aa(R_err);
-  x_err.tail<3>() = aa.angle() * aa.axis();
-
-  // Arm-induced EE velocity (base motion is rejected through x_err, as in the
-  // impedance law). e_dot = -(J dq); the LQR law w = -Kp e - Kd e_dot becomes:
-  const Eigen::Matrix<double, 6, 1> v_ee = J * state.dq;
+  // LQR-optimal task acceleration: w = Kp x_err - Kd (J dq), with the gains from
+  // the closed-form CARE solution (on_configure). Realized through the shared
+  // operational-space mapping (same as the impedance law; only the gains differ).
+  const Eigen::Matrix<double, 6, 1> x_err =
+    task_pose_error(model_->framePose("ee"), target.pose);
+  const Eigen::Matrix<double, 6, 1> v_ee = model_->jacobian("ee") * state.dq;
   const Eigen::Matrix<double, 6, 1> w = kp_.cwiseProduct(x_err) - kd_.cwiseProduct(v_ee);
 
-  // Operational-space inertia Lambda = (J M^-1 J^T)^-1 (damped for singularities),
-  // then tau = J^T (Lambda w). Compensating C dq + g in joint space cancels the
-  // nonlinear terms, so M q_ddot = J^T Lambda w and x_ddot ~ w near regulation.
-  const Eigen::MatrixXd Minv = M.inverse();
-  const Eigen::MatrixXd JMinvJt =
-    J * Minv * J.transpose() + jacobian_damping_ * Eigen::MatrixXd::Identity(6, 6);
-  const Eigen::MatrixXd Lambda = JMinvJt.inverse();
-
-  Eigen::VectorXd tau = J.transpose() * (Lambda * w);
-
-  // Posture task projected through the DYNAMICALLY-CONSISTENT nullspace
-  //   N = I - J^T (Lambda J M^-1),   so that  J M^-1 N = 0
-  // (Khatib OSC). This guarantees the posture torque produces no task-space
-  // acceleration. A kinematic projector I - J^+ J is NOT M-orthogonal here and
-  // would leak posture torque into the task, causing a steady-state task offset.
-  const Eigen::MatrixXd Jbar_T = Lambda * J * Minv;                    // 6 x n
-  const Eigen::MatrixXd N = Eigen::MatrixXd::Identity(n, n) - J.transpose() * Jbar_T;
-  if (q_rest_.size() == n)
-  {
-    const Eigen::VectorXd tau_posture = null_kp_ * (q_rest_ - state.q) - null_kd_ * state.dq;
-    tau += N * tau_posture;
-  }
-
-  // Compensate Coriolis/gravity (gravity ~0 underwater; harmless otherwise).
-  tau += model_->nonlinear();
-
-  // Clamp to per-joint torque limits.
-  for (Eigen::Index i = 0; i < n; ++i)
-  {
-    const double lim = (i < max_effort_.size()) ? max_effort_[i] : 1e9;
-    tau[i] = std::clamp(tau[i], -lim, lim);
-  }
-  return tau;
+  return operational_space_torque(
+    *model_, w, state.q, state.dq, q_rest_, null_kp_, null_kd_,
+    jacobian_damping_, max_effort_);
 }
 
 void TaskSpaceLqr::reset() {}

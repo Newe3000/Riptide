@@ -1,9 +1,9 @@
 #include "riptide_control/task_space_impedance.hpp"
 
-#include <algorithm>
 #include <vector>
 
 #include "pluginlib/class_list_macros.hpp"
+#include "riptide_control/operational_space.hpp"
 
 namespace riptide_control
 {
@@ -59,50 +59,22 @@ Eigen::VectorXd TaskSpaceImpedance::compute(
 {
   model_->update(state);
 
-  const Eigen::Isometry3d X = model_->framePose("ee");   // world EE pose
-  const Eigen::MatrixXd J = model_->jacobian("ee");       // 6 x n (world)
-  const Eigen::Index n = J.cols();
-
-  // Task-space pose error (world).
-  Eigen::Matrix<double, 6, 1> x_err;
-  x_err.head<3>() = target.pose.translation() - X.translation();
-  const Eigen::Matrix3d R_err = target.pose.rotation() * X.rotation().transpose();
-  const Eigen::AngleAxisd aa(R_err);
-  x_err.tail<3>() = aa.angle() * aa.axis();
-
-  // Damp the arm-induced EE velocity. Base motion is rejected through the
-  // position error (x_err) rather than a base-velocity feedforward: on a light
-  // free-floating base the arm's reaction forces move the base, so aggressive
-  // feedforward is counter-productive (it excites the base more than it helps).
-  const Eigen::Matrix<double, 6, 1> v_ee = J * state.dq;
-
-  const Eigen::Matrix<double, 6, 1> wrench =
+  // Inertia-shaped Cartesian impedance (Ott 2008): the desired task acceleration
+  //   a_des = Kp * x_err - Kd * (J dq)
+  // is realized through the operational-space inertia, so the EE presents a
+  // decoupled second-order impedance (x_ddot + Kd x_dot + Kp x_err = 0) rather
+  // than a pose-dependent one. Base motion is rejected through x_err; only the
+  // arm-induced EE velocity (J dq) is damped (a base-velocity feedforward was
+  // tried and reverted -- it excites the light free base via arm reaction).
+  const Eigen::Matrix<double, 6, 1> x_err =
+    task_pose_error(model_->framePose("ee"), target.pose);
+  const Eigen::Matrix<double, 6, 1> v_ee = model_->jacobian("ee") * state.dq;
+  const Eigen::Matrix<double, 6, 1> a_des =
     kp_.cwiseProduct(x_err) - kd_.cwiseProduct(v_ee);
 
-  Eigen::VectorXd tau = J.transpose() * wrench;
-
-  // Posture task in the nullspace (resolves the 7-DoF redundancy).
-  const Eigen::MatrixXd JJt =
-    J * J.transpose() + jacobian_damping_ * Eigen::MatrixXd::Identity(6, 6);
-  const Eigen::MatrixXd J_pinv = J.transpose() * JJt.inverse();       // n x 6
-  const Eigen::MatrixXd N = Eigen::MatrixXd::Identity(n, n) - J_pinv * J;
-  Eigen::VectorXd tau_posture = Eigen::VectorXd::Zero(n);
-  if (q_rest_.size() == n)
-  {
-    tau_posture = null_kp_ * (q_rest_ - state.q) - null_kd_ * state.dq;
-  }
-  tau += N * tau_posture;
-
-  // Compensate Coriolis/gravity (gravity is ~0 underwater; harmless otherwise).
-  tau += model_->nonlinear();
-
-  // Clamp to per-joint torque limits.
-  for (Eigen::Index i = 0; i < n; ++i)
-  {
-    const double lim = (i < max_effort_.size()) ? max_effort_[i] : 1e9;
-    tau[i] = std::clamp(tau[i], -lim, lim);
-  }
-  return tau;
+  return operational_space_torque(
+    *model_, a_des, state.q, state.dq, q_rest_, null_kp_, null_kd_,
+    jacobian_damping_, max_effort_);
 }
 
 void TaskSpaceImpedance::reset() {}
