@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<package format="3">
+  <name>riptide_eval</name>
+  <version>0.1.0</version>
+  <description>
+    Benchmark runner for the Riptide control zoo: replays the same disturbance
+    against each control law, records ControlDebug + odometry, and writes
+    comparison metrics (CSV) + plots.
+  </description>
+  <maintainer email="nepomukwerner23@gmail.com">Nepomuk Werner</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>riptide_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

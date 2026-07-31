@@ -1,5 +1,6 @@
 #include "riptide_control/ee_stabilization_controller.hpp"
 
+#include <chrono>
 #include <cmath>
 
 #include <Eigen/Geometry>
@@ -120,6 +121,12 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
     RCLCPP_ERROR(node->get_logger(), "Control law on_configure failed.");
     return controller_interface::CallbackReturn::ERROR;
   }
+
+  // Strip the "riptide_control/" prefix for a compact label (e.g. "TaskSpaceLqr").
+  const auto slash = law.find_last_of('/');
+  control_law_name_ = (slash == std::string::npos) ? law : law.substr(slash + 1);
+  debug_pub_ = node->create_publisher<riptide_msgs::msg::ControlDebug>(
+    "/riptide/control_debug", rclcpp::SystemDefaultsQoS());
 
   RCLCPP_INFO(node->get_logger(),
     "EeStabilizationController configured: %zu joints, law '%s'.", joints_.size(), law.c_str());
@@ -276,7 +283,11 @@ controller_interface::return_type EeStabilizationController::update(
     }
   }
 
+  const auto t_start = std::chrono::steady_clock::now();
   const Eigen::VectorXd tau = control_law_->compute(state, target_, period.seconds());
+  const double solve_ms =
+    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_start).count();
+
   if (!tau.allFinite())
   {
     RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
@@ -286,6 +297,28 @@ controller_interface::return_type EeStabilizationController::update(
   for (std::size_t i = 0; i < joints_.size() && i < static_cast<std::size_t>(tau.size()); ++i)
   {
     (void)command_interfaces_[cmd_effort_idx_[i]].set_value(tau[i]);
+  }
+
+  // Publish ControlDebug at ~50 Hz (every 5th cycle at 250 Hz) for evaluation.
+  if (debug_pub_ && (cycle_++ % 5 == 0))
+  {
+    const Eigen::Isometry3d X = model_->framePose("ee");   // model was updated in compute()
+    Eigen::Matrix<double, 6, 1> err;
+    err.head<3>() = target_.pose.translation() - X.translation();
+    const Eigen::Matrix3d R_err = target_.pose.rotation() * X.rotation().transpose();
+    const Eigen::AngleAxisd aa(R_err);
+    err.tail<3>() = aa.angle() * aa.axis();
+
+    riptide_msgs::msg::ControlDebug msg;
+    msg.header.stamp = get_node()->now();
+    msg.control_law = control_law_name_;
+    msg.solve_time_ms = solve_ms;
+    msg.joint_names = joints_;
+    msg.tau.assign(tau.data(), tau.data() + tau.size());
+    msg.q.assign(state.q.data(), state.q.data() + state.q.size());
+    msg.dq.assign(state.dq.data(), state.dq.data() + state.dq.size());
+    msg.ee_pose_error.assign(err.data(), err.data() + 6);
+    debug_pub_->publish(msg);
   }
   return controller_interface::return_type::OK;
 }

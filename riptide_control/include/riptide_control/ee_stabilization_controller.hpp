@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -8,8 +9,10 @@
 #include "controller_interface/controller_interface.hpp"
 #include "pluginlib/class_loader.hpp"
 #include "rclcpp/duration.hpp"
+#include "rclcpp/publisher.hpp"
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "riptide_msgs/msg/control_debug.hpp"
 
 #include "riptide_control/control_law_interface.hpp"
 #include "riptide_dynamics/dynamics_model_interface.hpp"
@@ -55,6 +58,11 @@ private:
   std::vector<std::size_t> state_vel_idx_;
   std::vector<std::size_t> base_idx_;           // 13
   bool has_base_{false};
+
+  // ControlDebug publisher (for logging / the evaluation benchmark).
+  rclcpp::Publisher<riptide_msgs::msg::ControlDebug>::SharedPtr debug_pub_;
+  std::string control_law_name_;
+  std::uint64_t cycle_{0};
 
   // The EE hold target is captured on the first update() cycle whose measured
   // state is finite, not in on_activate(): at activation the hardware's first

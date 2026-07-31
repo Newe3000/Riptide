@@ -143,12 +143,17 @@ def generate_launch_description():
         condition=IfCondition(use_mock_hardware),
     )
 
-    # Disturbance generator (steady_current / sinusoid / impulse). 'none' => off.
+    # Disturbance generator (steady_current / sinusoid / impulse / stochastic).
+    # 'none' => off.
     disturbance_node = Node(
         package="riptide_disturbance",
         executable="disturbance_generator",
         name="disturbance_generator",
-        parameters=[{"scenario": disturbance}],
+        parameters=[{
+            "scenario": disturbance,
+            "amplitude": ParameterValue(
+                LaunchConfiguration("disturbance_amplitude"), value_type=float),
+        }],
         condition=UnlessCondition(
             PythonExpression(["'", disturbance, "' == 'none'"])),
         output="screen",
@@ -187,6 +192,11 @@ def generate_launch_description():
                 "Disturbance scenario: none | steady_current | sinusoid | impulse | "
                 "stochastic (turbulent current: mean flow + Gauss-Markov turbulence)."
             ),
+        ),
+        DeclareLaunchArgument(
+            "disturbance_amplitude",
+            default_value="80.0",
+            description="Disturbance force magnitude [N] (mean flow for stochastic).",
         ),
         robot_state_publisher,
         controller_manager,

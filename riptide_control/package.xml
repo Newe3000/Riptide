@@ -17,6 +17,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>riptide_dynamics</depend>
+  <depend>riptide_msgs</depend>
   <depend>pluginlib</depend>
 
   <!-- Controller plugins (JointPdController, EeStabilizationController) -->

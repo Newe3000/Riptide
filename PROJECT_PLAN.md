@@ -332,7 +332,7 @@ byte-reproducible metrics for fair comparison.
 | **3. Floating base + hydro** | Free-joint base, fluid model, disturbance applier + generator | EE stabilizes under a steady-current disturbance | 🟡 infra done |
 | **4. Control zoo** | PID (`JointPdController`) + `TaskSpaceImpedance` + `TaskSpaceLqr` + `TaskSpaceMpc`, all pluginlib `IControlLaw`, `control_law:={impedance,lqr,mpc}` | All 4 selectable at runtime, each holds target under disturbance | ✅ done |
 | **4b. Base dynamic positioning** | Hull thrusters (5, via `<gpio>`) + geometry-derived allocator + `BaseThrusterController` | Base holds station under current (surge/heave held, roll/pitch level) | ✅ done (sway/yaw unactuated) |
-| **5. Evaluation** | Scenario library, benchmark runner, metrics, `launch_testing` | Automated comparison report over the 4 across ≥3 disturbance scenarios | ⬜ |
+| **5. Evaluation** | `riptide_eval` benchmark runner (same-seed replay per law), metrics, CSV + plots; ControlDebug publisher | Automated comparison over the laws across disturbance scenarios | 🟡 runner done |
 | **6. Extensibility proof** | Add a new sensor (e.g. DVL) + a thruster actuator via config only | New hardware appears end-to-end with **no** control-code change | ⬜ |
 
 Notes: the arm is the **Franka fer (Panda)**; the MuJoCo seam (Phase 0) was

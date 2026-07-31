@@ -19,7 +19,8 @@ See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full architecture and roadmap.
 | `riptide_dynamics` | `IDynamicsModel` + `PinocchioModel` (whole-body dynamics) | **Phase 4** |
 | `riptide_control` | `JointPdController`, `EeStabilizationController` + `TaskSpaceImpedance`, `BaseThrusterController` | **Phase 4b** |
 | `riptide_mujoco` | MuJoCo `SystemInterface` + floating base + hull thrusters + disturbances | **Phase 4b** |
-| `riptide_disturbance` | Disturbance scenario generator (current/sinusoid/impulse) | **Phase 3** |
+| `riptide_disturbance` | Disturbance scenario generator (current/sinusoid/impulse/stochastic) | **Phase 3** |
+| `riptide_eval` | Benchmark runner: same disturbance vs each law → CSV + plots | **Phase 5** |
 
 ## Prerequisites
 
@@ -101,6 +102,25 @@ ros2 launch riptide_bringup sim.launch.py use_mock_hardware:=false controller:=e
 `mpc` (§4 of the notes) adds input constraints + a receding horizon on top of the
 LQR cost, solved as per-axis QPs each cycle by a self-contained fast-gradient
 method (no external solver); its DARE terminal cost makes it provably stabilizing.
+
+### Benchmark (quantitative comparison)
+
+`riptide_eval` replays the **same** disturbance (fixed seed) against each control
+law and writes comparison metrics + plots:
+
+```bash
+ros2 run riptide_eval benchmark                       # all laws x {sinusoid, stochastic}
+ros2 run riptide_eval benchmark --laws impedance,lqr,mpc \
+    --scenarios stochastic --duration 20 --output-dir ~/riptide_bench
+```
+
+It launches the full stack per combination, records `/riptide/control_debug`
+(EE error, joint torque, solve time) + `/riptide/odom`, then emits into the
+output dir: `summary.csv` (EE position/orientation RMS + max, control effort,
+base station-keeping RMS, solver time), `raw_<law>_<scenario>.csv` time series,
+an `ee_error_<scenario>.png` overlay, and grouped-bar charts for accuracy,
+effort, and solver cost. The EE law also publishes `riptide_msgs/ControlDebug`
+at 50 Hz whenever it runs, so you can log/plot any run live.
 
 To see what the thrusters buy you, compare the base drift with and without them:
 

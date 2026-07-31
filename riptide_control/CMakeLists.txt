@@ -12,6 +12,7 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(riptide_msgs REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 
@@ -39,7 +40,7 @@ target_include_directories(riptide_control PUBLIC
 target_link_libraries(riptide_control Eigen3::Eigen)
 ament_target_dependencies(riptide_control
   ament_index_cpp controller_interface hardware_interface pluginlib
-  rclcpp rclcpp_lifecycle riptide_dynamics)
+  rclcpp rclcpp_lifecycle riptide_dynamics riptide_msgs)
 set_target_properties(riptide_control PROPERTIES
   INSTALL_RPATH "${PINOCCHIO_ROOT}/lib")
 
@@ -60,5 +61,5 @@ ament_export_include_directories(include)
 ament_export_libraries(riptide_control)
 ament_export_dependencies(
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
-  Eigen3 riptide_dynamics)
+  Eigen3 riptide_dynamics riptide_msgs)
 ament_package()
