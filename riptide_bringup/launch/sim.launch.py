@@ -183,7 +183,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "disturbance",
             default_value="none",
-            description="Disturbance scenario: none | steady_current | sinusoid | impulse.",
+            description=(
+                "Disturbance scenario: none | steady_current | sinusoid | impulse | "
+                "stochastic (turbulent current: mean flow + Gauss-Markov turbulence)."
+            ),
         ),
         robot_state_publisher,
         controller_manager,

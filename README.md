@@ -73,8 +73,20 @@ Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
 `ee` task-space / `none`), `control_law` (`impedance` / `lqr` / `mpc` — the EE
 law when `controller:=ee`), `base_control` (true/false — run the hull-thruster base
 dynamic-positioning controller), `rviz` (true/false), `disturbance`
-(none/steady_current/sinusoid/impulse). Tune the disturbance live, e.g.
-`ros2 param set /disturbance_generator amplitude 20.0`.
+(none/steady_current/sinusoid/impulse/**stochastic**). Tune the disturbance live,
+e.g. `ros2 param set /disturbance_generator amplitude 20.0`.
+
+`stochastic` is a **realistic turbulent current**: a mean flow plus first-order
+Gauss–Markov (Ornstein–Uhlenbeck) turbulence on force *and* torque — temporally
+correlated, mean-reverting colored noise (Fossen's standard environmental-load
+model), with lateral and rotational components a clean sinusoid lacks. Knobs:
+`turbulence_std` (N), `torque_std` (N·m), `correlation_time` (s), and `seed`
+(≥0 = reproducible for fair controller comparisons, <0 = nondeterministic).
+
+```bash
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee control_law:=mpc disturbance:=stochastic
+```
 
 The EE control law is a hot-swappable `IControlLaw` plugin. Compare the Cartesian
 impedance law against the operational-space LQR (optimal task gains from the cost
