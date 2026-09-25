@@ -32,6 +32,13 @@ std::string param_or(
   return (it != info.hardware_parameters.end() && !it->second.empty()) ? it->second
                                                                        : fallback;
 }
+
+bool param_bool(
+  const hardware_interface::HardwareInfo & info, const std::string & key, bool fallback)
+{
+  const std::string v = param_or(info, key, fallback ? "true" : "false");
+  return v == "true" || v == "True" || v == "1";
+}
 }  // namespace
 
 hardware_interface::CallbackReturn MujocoSystem::on_init(
@@ -59,6 +66,38 @@ hardware_interface::CallbackReturn MujocoSystem::on_init(
       "Failed to load MJCF '%s': %s", mjcf_path.c_str(), error);
     return hardware_interface::CallbackReturn::ERROR;
   }
+  // --- reusability toggles (hardware parameters) --------------------------
+  // water:=false  -> zero the fluid medium so NO water effects act (drag,
+  //   added mass, viscous damping, and the ocean current all scale with the
+  //   medium density/viscosity, so zeroing both removes them all). Gravity is
+  //   left at the scene's value (0 = neutral buoyancy); buoyancy/gravity is a
+  //   separate axis from the fluid medium.
+  // fixed_base:=true -> activate a weld constraint (auv_base <-> world) baked
+  //   into the MJCF, turning the floating base into a fixed-base manipulator.
+  if (!param_bool(info_, "water", true))
+  {
+    m_->opt.density = 0.0;
+    m_->opt.viscosity = 0.0;
+    RCLCPP_INFO(rclcpp::get_logger(kLogger),
+      "water:=false -> fluid medium disabled (no drag / added mass / current).");
+  }
+  if (param_bool(info_, "fixed_base", false))
+  {
+    const int eq = mj_name2id(m_, mjOBJ_EQUALITY, "base_weld");
+    if (eq >= 0)
+    {
+      m_->eq_active0[eq] = 1;   // copied into d_->eq_active by mj_resetData()
+      RCLCPP_INFO(rclcpp::get_logger(kLogger),
+        "fixed_base:=true -> base welded to world (non-floating).");
+    }
+    else
+    {
+      RCLCPP_WARN(rclcpp::get_logger(kLogger),
+        "fixed_base:=true but no 'base_weld' equality in the MJCF; base stays free. "
+        "Regenerate the scene (generate_scene.py).");
+    }
+  }
+
   d_ = mj_makeData(m_);
 
   // --- actuated joints ----------------------------------------------------
@@ -146,6 +185,9 @@ hardware_interface::CallbackReturn MujocoSystem::on_configure(
   dist_sub_ = node_->create_subscription<riptide_msgs::msg::DisturbanceCommand>(
     "/riptide/disturbance", rclcpp::QoS(10),
     [this](const riptide_msgs::msg::DisturbanceCommand & msg) { disturbance_callback(msg); });
+  current_sub_ = node_->create_subscription<geometry_msgs::msg::Vector3Stamped>(
+    "/riptide/current", rclcpp::QoS(10),
+    [this](const geometry_msgs::msg::Vector3Stamped & msg) { current_callback(msg); });
   dist_gt_pub_ = node_->create_publisher<riptide_msgs::msg::DisturbanceCommand>(
     "/riptide/disturbance/ground_truth", rclcpp::QoS(10));
   odom_pub_ = node_->create_publisher<nav_msgs::msg::Odometry>(
@@ -275,7 +317,11 @@ hardware_interface::return_type MujocoSystem::read(
 hardware_interface::return_type MujocoSystem::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  // Apply disturbance wrenches (world frame) to the target bodies.
+  // Apply disturbance wrenches (world frame) to the target bodies, and set the
+  // ocean current as the fluid medium's flow velocity ("wind"). Because MuJoCo's
+  // fluid model computes drag on every submerged geom relative to (v_geom - wind),
+  // the current pushes the WHOLE structure -- hull and every arm link -- rather
+  // than as a single lumped force on the base.
   {
     std::lock_guard<std::mutex> lock(dist_mutex_);
     for (const auto & [body, w] : disturbances_)
@@ -284,6 +330,9 @@ hardware_interface::return_type MujocoSystem::write(
       if (bid < 0) { continue; }
       for (int k = 0; k < 6; ++k) { d_->xfrc_applied[6 * bid + k] = w[k]; }
     }
+    m_->opt.wind[0] = current_vel_[0];
+    m_->opt.wind[1] = current_vel_[1];
+    m_->opt.wind[2] = current_vel_[2];
   }
 
   // Joint torque commands.
@@ -326,6 +375,14 @@ void MujocoSystem::disturbance_callback(const riptide_msgs::msg::DisturbanceComm
   }
   // Echo what is applied as ground truth.
   if (dist_gt_pub_) { dist_gt_pub_->publish(msg); }
+}
+
+void MujocoSystem::current_callback(const geometry_msgs::msg::Vector3Stamped & msg)
+{
+  // World-frame ocean-current velocity [m/s]. Stored here and pushed into
+  // m_->opt.wind in write(), so the fluid model applies it on the next step.
+  std::lock_guard<std::mutex> lock(dist_mutex_);
+  current_vel_ = {msg.vector.x, msg.vector.y, msg.vector.z};
 }
 
 void MujocoSystem::publish_base_state(const rclcpp::Time & time)

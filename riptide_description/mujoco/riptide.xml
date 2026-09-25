@@ -252,6 +252,7 @@
   </tendon>
   <equality>
     <joint joint1="finger_joint1" joint2="finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1" />
+    <weld name="base_weld" body1="auv_base" active="false" />
   </equality>
   <contact>
     <exclude body1="link0" body2="link1" />

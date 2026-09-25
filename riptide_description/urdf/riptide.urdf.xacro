@@ -9,6 +9,11 @@
   <xacro:arg name="use_mock_hardware" default="true"/>
   <!-- Franka model + joint-name prefix (fer_joint1..7). -->
   <xacro:arg name="arm_type" default="fer"/>
+  <!-- Reusability toggles (MuJoCo path only):
+         water      -> fluid medium on/off (drag, added mass, current)
+         fixed_base -> weld the base to the world (non-floating manipulator) -->
+  <xacro:arg name="water" default="true"/>
+  <xacro:arg name="fixed_base" default="false"/>
 
   <xacro:include filename="$(find riptide_description)/urdf/common.xacro"/>
   <xacro:include filename="$(find riptide_description)/urdf/auv_base.xacro"/>
@@ -30,5 +35,7 @@
   <xacro:riptide_ros2_control
     name="RiptideSystem"
     arm_prefix="$(arg arm_type)"
-    use_mock_hardware="$(arg use_mock_hardware)"/>
+    use_mock_hardware="$(arg use_mock_hardware)"
+    water="$(arg water)"
+    fixed_base="$(arg fixed_base)"/>
 </robot>

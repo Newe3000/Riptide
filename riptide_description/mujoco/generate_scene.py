@@ -153,6 +153,18 @@ def main():
             })
             break
 
+    # --- optional fixed-base support -----------------------------------------
+    # A weld constraint pinning auv_base to the world, INACTIVE by default so the
+    # base floats. MujocoSystem activates it when the `fixed_base` hardware
+    # parameter is true, turning the AUV into a fixed-base manipulator
+    # (reusability: simulate non-floating bases without regenerating the scene).
+    eq = root.find("equality")           # reuse the vendored one (gripper fingers)
+    if eq is None:
+        eq = ET.SubElement(root, "equality")
+    ET.SubElement(eq, "weld", {
+        "name": "base_weld", "body1": "auv_base", "active": "false",
+    })
+
     ET.indent(tree, space="  ")
     tree.write(OUT, encoding="unicode", xml_declaration=False)
     print(f"wrote {OUT}")

@@ -64,7 +64,8 @@
     </sensor>
   </xacro:macro>
 
-  <xacro:macro name="riptide_ros2_control" params="name arm_prefix use_mock_hardware">
+  <xacro:macro name="riptide_ros2_control"
+               params="name arm_prefix use_mock_hardware water:=^|true fixed_base:=^|false">
     <ros2_control name="${name}" type="system">
       <hardware>
         <xacro:if value="${use_mock_hardware}">
@@ -75,6 +76,9 @@
           <param name="mjcf_model">$(find riptide_description)/mujoco/riptide.xml</param>
           <param name="floating_base_joint">auv_freejoint</param>
           <param name="base_link_frame">auv_base_link</param>
+          <!-- Reusability toggles (see MujocoSystem::on_init). -->
+          <param name="water">${water}</param>
+          <param name="fixed_base">${fixed_base}</param>
         </xacro:unless>
       </hardware>
 

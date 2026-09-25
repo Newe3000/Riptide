@@ -45,6 +45,8 @@ def generate_launch_description():
     _reap_stale_sim_processes()
 
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
+    water = LaunchConfiguration("water")
+    fixed_base = LaunchConfiguration("fixed_base")
     rviz = LaunchConfiguration("rviz")
     disturbance = LaunchConfiguration("disturbance")
 
@@ -56,6 +58,8 @@ def generate_launch_description():
             FindExecutable(name="xacro"), " ",
             PathJoinSubstitution([description_pkg, "urdf", "riptide.urdf.xacro"]),
             " use_mock_hardware:=", use_mock_hardware,
+            " water:=", water,
+            " fixed_base:=", fixed_base,
         ]),
         value_type=str,
     )
@@ -157,6 +161,8 @@ def generate_launch_description():
         name="disturbance_generator",
         parameters=[{
             "scenario": disturbance,
+            "current_speed": ParameterValue(
+                LaunchConfiguration("current_speed"), value_type=float),
             "amplitude": ParameterValue(
                 LaunchConfiguration("disturbance_amplitude"), value_type=float),
         }],
@@ -170,6 +176,18 @@ def generate_launch_description():
             "use_mock_hardware",
             default_value="true",
             description="Use mock_components hardware (Phase 1) instead of MuJoCo.",
+        ),
+        DeclareLaunchArgument(
+            "water",
+            default_value="true",
+            description="Enable the fluid medium (drag, added mass, ocean current). "
+                        "Set false for a dry sim (MuJoCo path only).",
+        ),
+        DeclareLaunchArgument(
+            "fixed_base",
+            default_value="false",
+            description="Weld the AUV base to the world (non-floating, fixed-base "
+                        "manipulator). MuJoCo path only; pair with base_control:=false.",
         ),
         DeclareLaunchArgument(
             "rviz",
@@ -207,9 +225,18 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument(
+            "current_speed",
+            default_value="1.0",
+            description="Ocean-current flow speed [m/s] for the flow scenarios "
+                        "(steady_current / sinusoid / stochastic). Applied via the "
+                        "MuJoCo fluid model as 'wind', so it pushes the whole "
+                        "structure (hull + every arm link), not just the base.",
+        ),
+        DeclareLaunchArgument(
             "disturbance_amplitude",
             default_value="80.0",
-            description="Disturbance force magnitude [N] (mean flow for stochastic).",
+            description="Point-wrench force magnitude [N] for the 'impulse' scenario "
+                        "(a localized hit on the base).",
         ),
         robot_state_publisher,
         controller_manager,

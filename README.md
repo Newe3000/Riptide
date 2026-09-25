@@ -74,15 +74,43 @@ Launch args: `use_mock_hardware` (true/false), `controller` (`pd` joint-hold /
 `ee` task-space / `none`), `control_law` (`impedance` / `lqr` / `mpc` — the EE
 law when `controller:=ee`), `base_control` (true/false — run the hull-thruster base
 dynamic-positioning controller), `rviz` (true/false), `disturbance`
-(none/steady_current/sinusoid/impulse/**stochastic**). Tune the disturbance live,
-e.g. `ros2 param set /disturbance_generator amplitude 20.0`.
+(none/steady_current/sinusoid/impulse/**stochastic**), `current_speed` (m/s — flow
+speed for the current scenarios), `disturbance_amplitude` (N — the `impulse` hit),
+`water` (true/false — the fluid medium), `fixed_base` (true/false — non-floating base).
+Tune the current live, e.g. `ros2 param set /disturbance_generator current_speed 0.5`.
 
-`stochastic` is a **realistic turbulent current**: a mean flow plus first-order
-Gauss–Markov (Ornstein–Uhlenbeck) turbulence on force *and* torque — temporally
-correlated, mean-reverting colored noise (Fossen's standard environmental-load
-model), with lateral and rotational components a clean sinusoid lacks. Knobs:
-`turbulence_std` (N), `torque_std` (N·m), `correlation_time` (s), and `seed`
-(≥0 = reproducible for fair controller comparisons, <0 = nondeterministic).
+**Reusability toggles** (MuJoCo path only): `water:=false` zeroes the fluid
+medium so no water effects act at all — drag, added mass, and the ocean current
+all scale with the medium density/viscosity (gravity stays 0 / neutral buoyancy;
+that is a separate axis). `fixed_base:=true` activates a weld constraint that pins
+the AUV base to the world, turning it into a fixed-base manipulator (pair it with
+`base_control:=false`, since station-keeping is moot). Both are hardware
+parameters plumbed launch arg → xacro → `MujocoSystem`:
+
+```bash
+# Dry, fixed-base arm (a plain 7-DoF manipulator, no water, no floating base):
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee water:=false fixed_base:=true \
+    base_control:=false rviz:=true
+```
+
+**The current acts on the whole structure.** The flow scenarios
+(`steady_current` / `sinusoid` / `stochastic`) publish a current *velocity*
+(`/riptide/current`, m/s, world frame) which the MuJoCo `SystemInterface` feeds
+into the fluid model as `wind`. Drag is then computed on **every** submerged geom
+relative to `(v_geom − v_current)`, so the current pushes the hull **and every arm
+link** — distributed and velocity-dependent — rather than as one lumped force on
+the base. `impulse` is instead a localized point wrench on the base (a bump),
+published on `/riptide/disturbance`.
+
+`stochastic` is a **realistic turbulent current**: a mean flow (`current_speed`)
+plus first-order Gauss–Markov (Ornstein–Uhlenbeck) turbulence on the current
+*velocity* — temporally correlated, mean-reverting colored noise (Fossen's
+standard environmental-load model), with lateral components a clean sinusoid
+lacks. The distributed drag turns the fluctuating flow into fluctuating force
+*and* torque on the whole body automatically. Knobs: `turbulence_std` (m/s,
+per-axis velocity std), `correlation_time` (s), and `seed` (≥0 = reproducible for
+fair controller comparisons, <0 = nondeterministic).
 
 ```bash
 ros2 launch riptide_bringup sim.launch.py \
@@ -147,8 +175,8 @@ ros2 launch riptide_bringup sim.launch.py \
   `base_control:=false`). Without base station-keeping the free-floating base
   slowly drifts out of the arm's reach, so the arm saturates trying to hold the
   fixed world target. Run with `base_control:=true` (the default) so the hull
-  thrusters hold the base, or lower the disturbance
-  (`ros2 param set /disturbance_generator amplitude 20.0`).
+  thrusters hold the base, or lower the current
+  (`ros2 param set /disturbance_generator current_speed 0.4`).
 - **"Overrun detected! ... missed its desired rate."** A benign warning: the
   control loop occasionally exceeds its period without real-time (FIFO) priority,
   which isn't available here. It self-corrects and doesn't affect the result.

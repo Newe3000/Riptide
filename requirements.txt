@@ -9,8 +9,12 @@ Water-Simulation:
 	        gravity="0 0 0" (see generate_scene.py docstring). Real buoyancy is a
 	        listed later upgrade (Fossen-style buoyancy+gravity).
 	[d] active water affects: currents.
-	    - disturbance_generator: steady_current / sinusoid / impulse / stochastic
-	      (Gauss-Markov turbulent current), applied as a wrench on the base.
+	    - disturbance_generator: steady_current / sinusoid / stochastic
+	      (Gauss-Markov turbulent current), published as a flow VELOCITY on
+	      /riptide/current and applied via the MuJoCo fluid model as `wind`, so
+	      drag acts on EVERY submerged geom (hull + all arm links), distributed
+	      and velocity-dependent -- not a lumped force on the base.
+	      (impulse remains a localized point wrench on the base -- a bump.)
 	    [m] waves: NOT implemented. Only named as a planned scenario in
 	        PROJECT_PLAN.md; no wave field / orbital-velocity model exists.
 
@@ -52,15 +56,20 @@ Interfacing:
 		      the model's nonlinear() term is Coriolis-only.
 
 Reusability for other use-cases:
-	[m] allow to remove water affects
-	    - No toggle. density/viscosity/fluidshape are hardcoded in
-	      generate_scene.py; removing water means editing + regenerating the MJCF.
-	      (The `hydro` launch arg only toggles controller-side drag COMPENSATION,
-	      not the simulator's fluid.)
-	[m] allow fixing the base to simulate non-floating bases
-	    - No toggle. The <freejoint> is hardcoded in generate_scene.py.
-	      use_mock_hardware:=true gives a static (physics-less) base, which is not
-	      the same as a fixed base with real arm dynamics.
+	[d] allow to remove water affects
+	    - Launch arg `water:=true|false` (hardware param -> MujocoSystem). When
+	      false the fluid medium density/viscosity are zeroed, so ALL water
+	      effects vanish (drag, added mass, viscous damping, and the current --
+	      they all scale with the medium). Gravity stays 0 (neutral buoyancy is a
+	      separate axis). (The `hydro` arg is unrelated: controller-side drag
+	      COMPENSATION.)
+	[d] allow fixing the base to simulate non-floating bases
+	    - Launch arg `fixed_base:=true|false`. A weld constraint (auv_base <->
+	      world), baked INACTIVE into the MJCF by generate_scene.py, is activated
+	      by MujocoSystem -> a real fixed-base manipulator with full arm dynamics
+	      (unlike use_mock_hardware, which is physics-less). Pair with
+	      base_control:=false. Verified: base drift under a 200 N kick
+	      0.75 m (free) -> 0.003 m (fixed).
 	[m] Plan for integrating a quadruped-base
 	    - No mention anywhere in the repo. (The IDynamicsModel / IControlLaw
 	      plugin abstractions would help, but there is no written plan.)

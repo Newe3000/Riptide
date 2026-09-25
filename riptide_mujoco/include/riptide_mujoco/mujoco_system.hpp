@@ -16,6 +16,7 @@
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_component_interface_params.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
+#include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "riptide_msgs/msg/disturbance_command.hpp"
@@ -59,6 +60,7 @@ public:
 
 private:
   void disturbance_callback(const riptide_msgs::msg::DisturbanceCommand & msg);
+  void current_callback(const geometry_msgs::msg::Vector3Stamped & msg);
   void publish_base_state(const rclcpp::Time & time);
 
   // MuJoCo model + state (owned).
@@ -101,12 +103,14 @@ private:
   std::atomic<bool> spinning_{false};
 
   rclcpp::Subscription<riptide_msgs::msg::DisturbanceCommand>::SharedPtr dist_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr current_sub_;
   rclcpp::Publisher<riptide_msgs::msg::DisturbanceCommand>::SharedPtr dist_gt_pub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   std::mutex dist_mutex_;
   std::map<std::string, std::array<double, 6>> disturbances_;  ///< body -> wrench
+  std::array<double, 3> current_vel_{{0.0, 0.0, 0.0}};  ///< world-frame flow vel [m/s]
 
   std::string world_frame_{"world"};
   std::string base_frame_{"auv_base_link"};
