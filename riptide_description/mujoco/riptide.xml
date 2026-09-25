@@ -117,6 +117,8 @@
       <site name="thr_vfr" pos="0.22 -0.22 0.3" size="0.03" rgba="1.0 0.55 0.0 1" />
       <site name="thr_vbl" pos="-0.22 0.22 0.3" size="0.03" rgba="1.0 0.55 0.0 1" />
       <site name="thr_vbr" pos="-0.22 -0.22 0.3" size="0.03" rgba="1.0 0.55 0.0 1" />
+      <site name="thr_lat_fwd" pos="0.3 0.0 0.0" size="0.03" rgba="1.0 0.55 0.0 1" />
+      <site name="thr_lat_aft" pos="-0.3 0.0 0.0" size="0.03" rgba="1.0 0.55 0.0 1" />
       <body name="link0" childclass="panda" pos="0 0 0.3">
         <inertial mass="0.629769" pos="-0.041018 -0.00014 0.049974" fullinertia="0.00315 0.00388 0.004285 8.2904e-7 0.00015 8.2299e-6" />
         <geom mesh="link0_0" material="off_white" class="visual" />
@@ -270,5 +272,7 @@
     <motor name="thr_vfr" site="thr_vfr" gear="0.0 0.0 1.0 0 0 0" ctrlrange="-200.0 200.0" forcerange="-200.0 200.0" />
     <motor name="thr_vbl" site="thr_vbl" gear="0.0 0.0 1.0 0 0 0" ctrlrange="-200.0 200.0" forcerange="-200.0 200.0" />
     <motor name="thr_vbr" site="thr_vbr" gear="0.0 0.0 1.0 0 0 0" ctrlrange="-200.0 200.0" forcerange="-200.0 200.0" />
+    <motor name="thr_lat_fwd" site="thr_lat_fwd" gear="0.0 1.0 0.0 0 0 0" ctrlrange="-200.0 200.0" forcerange="-200.0 200.0" />
+    <motor name="thr_lat_aft" site="thr_lat_aft" gear="0.0 1.0 0.0 0 0 0" ctrlrange="-200.0 200.0" forcerange="-200.0 200.0" />
   </actuator>
 </mujoco>

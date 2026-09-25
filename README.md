@@ -85,13 +85,47 @@ all scale with the medium density/viscosity (gravity stays 0 / neutral buoyancy;
 that is a separate axis). `fixed_base:=true` activates a weld constraint that pins
 the AUV base to the world, turning it into a fixed-base manipulator (pair it with
 `base_control:=false`, since station-keeping is moot). Both are hardware
-parameters plumbed launch arg → xacro → `MujocoSystem`:
+parameters plumbed launch arg → xacro → `MujocoSystem`.
+
+### Example scenarios
+
+Three representative configurations, a progression from a plain manipulator to
+the full AUV under load (all on the MuJoCo physics path, with EE stabilization and
+RViz on):
+
+**1 — Fixed base (dry 7-DoF manipulator).** The base is welded to the world and
+the fluid medium is off, so this is an ordinary fixed-base arm holding its EE
+target — no floating dynamics, no water. `base_control:=false` since
+station-keeping is moot when the base is pinned.
 
 ```bash
-# Dry, fixed-base arm (a plain 7-DoF manipulator, no water, no floating base):
 ros2 launch riptide_bringup sim.launch.py \
-    use_mock_hardware:=false controller:=ee water:=false fixed_base:=true \
-    base_control:=false rviz:=true
+    use_mock_hardware:=false controller:=ee rviz:=true \
+    fixed_base:=true water:=false base_control:=false
+```
+
+**2 — Floating base + water (passive).** The AUV floats (6-DOF free joint) in
+neutrally-buoyant water with no external current. The fully-actuated hull thrusters
+hold full pose (position + level attitude + heading) against the arm's reaction,
+while the water's drag + added mass damp the motion. To instead let the hull tilt
+freely with the arm (a compliant floating base), zero the attitude gains:
+`ros2 param set /base_thruster_controller kp_roll 0.0` (and `kp_pitch`).
+
+```bash
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee rviz:=true \
+    fixed_base:=false water:=true base_control:=true disturbance:=none
+```
+
+**3 — Floating base + water + strong current.** Adds a strong turbulent ocean
+current (2.5 m/s mean flow) that pushes the whole structure — hull and every arm
+link. The EE law and base thrusters fight to hold station under the load.
+
+```bash
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee rviz:=true \
+    fixed_base:=false water:=true base_control:=true \
+    disturbance:=stochastic current_speed:=2.5
 ```
 
 **The current acts on the whole structure.** The flow scenarios
@@ -193,23 +227,25 @@ ros2 launch riptide_bringup sim.launch.py \
   cycle.
 - **`TaskSpaceImpedance`** control law: world-frame EE pose error → task wrench →
   `J^T` joint torques, with a nullspace posture task.
-- **Hull thrusters** (`generate_scene.py`): 5 force actuators on the base — 1
-  surge (±x) + 4 vertical corner thrusters (±z). Exposed through the
-  `ros2_control` seam as a `<gpio>` and mapped by name to MuJoCo `<motor>`s, so
-  adding a thruster is a declarative change (scene + xacro + config).
+- **Hull thrusters** (`generate_scene.py`): 7 force actuators making the base
+  **fully actuated** (all 6 DOF) — 1 surge (±x), 4 vertical corner thrusters (±z:
+  heave + roll + pitch), and 2 lateral thrusters (±y at ±x: sway + yaw). Exposed
+  through the `ros2_control` seam as a `<gpio>` and mapped by name to MuJoCo
+  `<motor>`s, so adding a thruster is a declarative change (scene + xacro + config).
 - **`BaseThrusterController`** (`riptide_control`): reads the base sensor and
-  allocates a PD station-keeping wrench `[Fx, Fz, Mx, My]` to the thrusters via
-  the pseudo-inverse of the geometry-derived allocation matrix — surge/heave
-  position hold + roll/pitch leveling.
+  allocates a full 6-DOF PD station-keeping wrench `[Fx, Fy, Fz, Mx, My, Mz]` to
+  the thrusters via the pseudo-inverse of the 6×N geometry-derived allocation
+  matrix — position hold (x/y/z), attitude leveling (roll/pitch), and heading
+  hold (yaw). Every gain is independent in the yaml, so any DOF can be left
+  compliant (set its gain pair to 0).
 
-**What works / the honest result.** With `base_control:=true` under a sinusoidal
-surge current the base **holds station**: surge x stays within a few cm of
-target, heave z is held exactly, and roll/pitch stay level (`qx, qy ≈ 0`) — vs.
-the free-floating base drifting past 1 m and away. The EE is correspondingly
-steady in the controlled axes.
+**What works / the honest result.** With `base_control:=true` under a current the
+fully-actuated base **holds station in all 6 DOF**: position (x/y/z) within a few
+cm of target, roll/pitch level (`qx, qy ≈ 0`), and heading (yaw) held — vs. the
+free-floating base drifting away. The EE is correspondingly steady. The allocation
+is decoupled (a pure sway command fires only the lateral thrusters, pure yaw only
+their differential), verified by reproduction error ~1e-6 per DOF.
 
-**Remaining limits.** **Sway (y) and yaw are unactuated** (no thrusters were
-requested for them), so the base still slowly drifts in y / yaw under the arm's
-reaction — adding a sway/yaw thruster is now a config + scene change. Still open
-in the control zoo: the LQR and MPC `IControlLaw` plugins (the architecture
-already supports dropping them in alongside `TaskSpaceImpedance`).
+**Remaining limits.** Still open in the control zoo: the LQR and MPC `IControlLaw`
+plugins (the architecture already supports dropping them in alongside
+`TaskSpaceImpedance`).

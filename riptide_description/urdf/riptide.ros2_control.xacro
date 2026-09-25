@@ -102,6 +102,8 @@
         <xacro:riptide_thruster tname="thr_vfr"/>
         <xacro:riptide_thruster tname="thr_vbl"/>
         <xacro:riptide_thruster tname="thr_vbr"/>
+        <xacro:riptide_thruster tname="thr_lat_fwd"/>
+        <xacro:riptide_thruster tname="thr_lat_aft"/>
       </gpio>
     </ros2_control>
   </xacro:macro>

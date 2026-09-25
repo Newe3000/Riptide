@@ -44,24 +44,29 @@ START_Z = 1.2              # spawn height above the seabed [m]
 BOX_I = BASE_MASS * (CUBE_SIZE**2 + CUBE_SIZE**2) / 12.0
 
 # --- Hull thrusters (Phase 4b: base dynamic positioning) ---------------------
-# Each thruster is a body-fixed force actuator applied at a site. The chosen
-# layout gives control authority over the 4 requested DOFs:
+# Each thruster is a body-fixed force actuator applied at a site. The layout is
+# FULLY ACTUATED -- it spans all 6 rigid-body DOFs:
 #   * 1 surge thruster along body +x  -> forward/backward (Fx),
 #   * 4 vertical thrusters along body +z at the top corners -> their common mode
 #     is heave (Fz, up/down); front/back differential -> pitch (My); left/right
-#     differential -> roll (Mx).
-# Sway (Fy) and yaw (Mz) are intentionally left unactuated (not requested).
+#     differential -> roll (Mx),
+#   * 2 lateral thrusters along body +y at +/-x (CoM height) -> common mode is
+#     sway (Fy); front/back differential -> yaw (Mz). Placed at z=0 so they add
+#     no roll/pitch/heave coupling.
 # A force-along-axis at position r produces wrench [axis; r x axis] per unit ctrl,
-# so the BaseThrusterController rebuilds the allocation matrix from this geometry.
+# so the BaseThrusterController rebuilds the 6xN allocation matrix from this
+# geometry (positions + axes mirrored in riptide_controllers.yaml).
 THRUST_LIMIT = 200.0       # per-thruster force clamp [N]
 TA = 0.22                  # corner offset of the vertical thrusters [m]
-#   name,        position (x, y, z),   force axis (body frame)
+#   name,          position (x, y, z),   force axis (body frame)
 THRUSTERS = [
-    ("thr_surge", (-HALF, 0.0, 0.0),   (1.0, 0.0, 0.0)),
-    ("thr_vfl",   ( TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # front-left
-    ("thr_vfr",   ( TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # front-right
-    ("thr_vbl",   (-TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # back-left
-    ("thr_vbr",   (-TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # back-right
+    ("thr_surge",   (-HALF, 0.0, 0.0),   (1.0, 0.0, 0.0)),
+    ("thr_vfl",     ( TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # front-left
+    ("thr_vfr",     ( TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # front-right
+    ("thr_vbl",     (-TA,  TA, HALF),    (0.0, 0.0, 1.0)),   # back-left
+    ("thr_vbr",     (-TA, -TA, HALF),    (0.0, 0.0, 1.0)),   # back-right
+    ("thr_lat_fwd", ( HALF, 0.0, 0.0),   (0.0, 1.0, 0.0)),   # fwd lateral: +Fy, +Mz
+    ("thr_lat_aft", (-HALF, 0.0, 0.0),   (0.0, 1.0, 0.0)),   # aft lateral: +Fy, -Mz
 ]
 
 

@@ -28,12 +28,16 @@ controller_interface::CallbackReturn BaseThrusterController::on_init()
 
   auto_declare<double>("kp_x", 0.0);
   auto_declare<double>("kd_x", 0.0);
+  auto_declare<double>("kp_y", 0.0);
+  auto_declare<double>("kd_y", 0.0);
   auto_declare<double>("kp_z", 0.0);
   auto_declare<double>("kd_z", 0.0);
   auto_declare<double>("kp_roll", 0.0);
   auto_declare<double>("kd_roll", 0.0);
   auto_declare<double>("kp_pitch", 0.0);
   auto_declare<double>("kd_pitch", 0.0);
+  auto_declare<double>("kp_yaw", 0.0);
+  auto_declare<double>("kd_yaw", 0.0);
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -49,12 +53,16 @@ controller_interface::CallbackReturn BaseThrusterController::on_configure(
 
   kp_x_ = node->get_parameter("kp_x").as_double();
   kd_x_ = node->get_parameter("kd_x").as_double();
+  kp_y_ = node->get_parameter("kp_y").as_double();
+  kd_y_ = node->get_parameter("kd_y").as_double();
   kp_z_ = node->get_parameter("kp_z").as_double();
   kd_z_ = node->get_parameter("kd_z").as_double();
   kp_roll_ = node->get_parameter("kp_roll").as_double();
   kd_roll_ = node->get_parameter("kd_roll").as_double();
   kp_pitch_ = node->get_parameter("kp_pitch").as_double();
   kd_pitch_ = node->get_parameter("kd_pitch").as_double();
+  kp_yaw_ = node->get_parameter("kp_yaw").as_double();
+  kd_yaw_ = node->get_parameter("kd_yaw").as_double();
 
   const auto pos = node->get_parameter("thruster_positions").as_double_array();
   const auto axes = node->get_parameter("thruster_axes").as_double_array();
@@ -67,23 +75,25 @@ controller_interface::CallbackReturn BaseThrusterController::on_configure(
     return controller_interface::CallbackReturn::ERROR;
   }
 
-  // Build the allocation matrix A (4 x N): column i is the [Fx, Fz, Mx, My]
+  // Build the allocation matrix A (6 x N): column i is the [Fx, Fy, Fz, Mx, My, Mz]
   // rows of thruster i's unit wrench [axis; r x axis]. Then A_pinv = A^T (A A^T)^-1.
-  Eigen::MatrixXd A(4, nt);
+  Eigen::MatrixXd A(6, nt);
   for (std::size_t i = 0; i < nt; ++i)
   {
     const Eigen::Vector3d r(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
     const Eigen::Vector3d a(axes[3 * i], axes[3 * i + 1], axes[3 * i + 2]);
     const Eigen::Vector3d m = r.cross(a);   // moment per unit thrust
     A(0, i) = a.x();   // Fx
-    A(1, i) = a.z();   // Fz
-    A(2, i) = m.x();   // Mx
-    A(3, i) = m.y();   // My
+    A(1, i) = a.y();   // Fy
+    A(2, i) = a.z();   // Fz
+    A(3, i) = m.x();   // Mx
+    A(4, i) = m.y();   // My
+    A(5, i) = m.z();   // Mz
   }
-  const Eigen::Matrix4d AAt = A * A.transpose();
+  const Eigen::MatrixXd AAt = A * A.transpose();   // 6 x 6
   // Small Tikhonov term keeps the inverse well-posed if a DOF is weakly actuated.
-  const Eigen::Matrix4d reg = 1e-6 * Eigen::Matrix4d::Identity();
-  alloc_pinv_ = A.transpose() * (AAt + reg).inverse();   // N x 4
+  const Eigen::MatrixXd reg = 1e-6 * Eigen::MatrixXd::Identity(6, 6);
+  alloc_pinv_ = A.transpose() * (AAt + reg).inverse();   // N x 6
 
   RCLCPP_INFO(node->get_logger(),
     "BaseThrusterController configured: %zu thrusters, sensor '%s'.",
@@ -206,19 +216,22 @@ controller_interface::return_type BaseThrusterController::update(
   Eigen::Matrix3d R;
   if (!read_base(p, R, v_world, w_body)) { return hold_zero(); }
 
+  const double yaw = std::atan2(R(1, 0), R(0, 0));   // heading about world z
   if (capture_pending_)
   {
     target_pos_ = p;
+    target_yaw_ = yaw;
     capture_pending_ = false;
     RCLCPP_INFO(get_node()->get_logger(),
-      "Station-keeping base at x=%.3f, z=%.3f (level attitude).", p.x(), p.z());
+      "Station-keeping base at x=%.3f, y=%.3f, z=%.3f, yaw=%.3f.",
+      p.x(), p.y(), p.z(), yaw);
   }
 
-  // Desired restoring force in the world frame (x, z only), rotated into the
-  // body frame the thrusters act in.
+  // Desired restoring force in the world frame (x, y, z), rotated into the body
+  // frame the thrusters act in.
   const Eigen::Vector3d f_world(
     kp_x_ * (target_pos_.x() - p.x()) - kd_x_ * v_world.x(),
-    0.0,
+    kp_y_ * (target_pos_.y() - p.y()) - kd_y_ * v_world.y(),
     kp_z_ * (target_pos_.z() - p.z()) - kd_z_ * v_world.z());
   const Eigen::Vector3d f_body = R.transpose() * f_world;
 
@@ -231,7 +244,14 @@ controller_interface::return_type BaseThrusterController::update(
   const double m_x = kp_roll_ * tilt_body.x() - kd_roll_ * w_body.x();
   const double m_y = kp_pitch_ * tilt_body.y() - kd_pitch_ * w_body.y();
 
-  const Eigen::Vector4d wrench(f_body.x(), f_body.z(), m_x, m_y);
+  // Yaw: hold the captured heading. For a near-level hull body-z ~ world-z, so
+  // the heading error maps directly onto the body-frame yaw torque.
+  double yaw_err = target_yaw_ - yaw;
+  yaw_err = std::atan2(std::sin(yaw_err), std::cos(yaw_err));   // wrap to [-pi, pi]
+  const double m_z = kp_yaw_ * yaw_err - kd_yaw_ * w_body.z();
+
+  Eigen::VectorXd wrench(6);
+  wrench << f_body.x(), f_body.y(), f_body.z(), m_x, m_y, m_z;
   Eigen::VectorXd u = alloc_pinv_ * wrench;   // per-thruster force
   if (!u.allFinite()) { return hold_zero(); }
 
