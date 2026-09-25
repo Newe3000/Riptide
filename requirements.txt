@@ -1,0 +1,66 @@
+# Legend: [d] done / present   [m] missing   (notes clarify partials)
+
+Water-Simulation:
+	[d] passive water affects on the arm and base: damping, inertia, drag.
+	    - MJCF <option> density/viscosity (inertia-box fluid model on every body,
+	      incl. the arm) + per-geom fluidshape="ellipsoid" on the hull
+	      => drag + added mass (inertia) + damping.
+	    [m] buoyancy: NOT a true Archimedes force. Modeled as neutral buoyancy via
+	        gravity="0 0 0" (see generate_scene.py docstring). Real buoyancy is a
+	        listed later upgrade (Fossen-style buoyancy+gravity).
+	[d] active water affects: currents.
+	    - disturbance_generator: steady_current / sinusoid / impulse / stochastic
+	      (Gauss-Markov turbulent current), applied as a wrench on the base.
+	    [m] waves: NOT implemented. Only named as a planned scenario in
+	        PROJECT_PLAN.md; no wave field / orbital-velocity model exists.
+
+Floating-Base Simulation:
+	[d] are the dynamics of arm and base coupled
+	    - Arm subtree nested under the free-floating auv_base in the MJCF; MuJoCo
+	      solves the coupled multibody system (arm reaction torque tilts the hull).
+	[d] is the base free in space?
+	    - 6-DOF <freejoint name="auv_freejoint"/> on auv_base (MuJoCo path).
+	      (use_mock_hardware:=true instead pins it with a static TF, no physics.)
+
+Interfacing:
+	publisher topic:
+		[d] SE3 pose of mobile base in world frame
+		    - /riptide/odom (pose) and TF world -> auv_base_link (riptide_mujoco).
+		[d] SE3 pose of end-effector to mobile base
+		    - Via /tf: auv_base_link -> ... -> fer_hand_tcp (robot_state_publisher).
+		      No dedicated pose topic; requires a TF lookup.
+		[m] velocities of end-effector in mobile base
+		    - Not published (and TF carries no velocity).
+		[d] velocities of mobile base in world frame
+		    - /riptide/odom (twist). NOTE: linear is world-frame, angular is
+		      body-frame (MuJoCo free-joint qvel convention).
+		[m] mass-matrix of arm
+		    - Computed internally (PinocchioModel::massMatrix / M_) but never
+		      published on a topic.
+		[m] external force on robot-end-effector
+		    - Not published or estimated. Disturbances are applied to the BASE and
+		      echoed on /riptide/disturbance/ground_truth; no EE wrench exists.
+
+		[m] Jacobian of end-effector to mobile base
+		    - Computed internally (PinocchioModel J_world_) but not published; and
+		      it is world-frame, not base-frame.
+		[d] joint position and velocity of the arm
+		    - /joint_states (joint_state_broadcaster); also q, dq in
+		      /riptide/control_debug.
+		[m] gravitation-force-vector
+		    - Not published. Also g is intentionally zeroed (neutral buoyancy), so
+		      the model's nonlinear() term is Coriolis-only.
+
+Reusability for other use-cases:
+	[m] allow to remove water affects
+	    - No toggle. density/viscosity/fluidshape are hardcoded in
+	      generate_scene.py; removing water means editing + regenerating the MJCF.
+	      (The `hydro` launch arg only toggles controller-side drag COMPENSATION,
+	      not the simulator's fluid.)
+	[m] allow fixing the base to simulate non-floating bases
+	    - No toggle. The <freejoint> is hardcoded in generate_scene.py.
+	      use_mock_hardware:=true gives a static (physics-less) base, which is not
+	      the same as a fixed base with real arm dynamics.
+	[m] Plan for integrating a quadruped-base
+	    - No mention anywhere in the repo. (The IDynamicsModel / IControlLaw
+	      plugin abstractions would help, but there is no written plan.)

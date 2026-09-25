@@ -146,7 +146,12 @@ base_thruster_controller:
     kp_z: 1000.0
     kd_z: 800.0
     # Attitude leveling: roll / pitch to flat.
-    kp_roll: 400.0
-    kd_roll: 120.0
-    kp_pitch: 400.0
-    kd_pitch: 120.0
+    # Zeroed so the base attitude is FREE to respond to the arm's reaction
+    # torque (the whole point of a floating base) instead of being pinned level
+    # by the thrusters. Surge/heave (kp_x, kp_z) still hold station so the arm
+    # stays in reach; the MuJoCo ellipsoid fluid model damps the free rotation.
+    # Restore these (e.g. 400 / 120) to actively level the hull again.
+    kp_roll: 0.0
+    kd_roll: 0.0
+    kp_pitch: 0.0
+    kd_pitch: 0.0

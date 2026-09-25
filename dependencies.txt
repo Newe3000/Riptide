@@ -1,0 +1,104 @@
+# Riptide — dependencies
+#
+# Everything the workspace needs to build and run, grouped by how you install it.
+# Target platform: ROS 2 Jazzy on Ubuntu 24.04.
+#
+# Fast path (installs everything with a rosdep key below, EXCEPT the two
+# manual-install libraries in section 4 — Pinocchio and MuJoCo):
+#
+#   source /opt/ros/jazzy/setup.bash
+#   rosdep install --from-paths . --ignore-src -r -y
+#   colcon build --symlink-install
+#   source install/setup.bash
+#
+# ============================================================================
+# 1. ROS 2 base
+# ============================================================================
+# ROS 2 Jazzy (ros-jazzy-desktop recommended — pulls in rviz2, tf2, launch, etc.)
+#   sudo apt install ros-jazzy-desktop
+ros-jazzy-desktop
+
+# ============================================================================
+# 2. ROS 2 packages (apt: ros-jazzy-<name>, or via `rosdep install`)
+# ============================================================================
+# --- build tooling ---
+ament_cmake                 # ros-jazzy-ament-cmake
+eigen3_cmake_module         # ros-jazzy-eigen3-cmake-module
+rosidl_default_generators   # ros-jazzy-rosidl-default-generators   (riptide_msgs)
+rosidl_default_runtime      # ros-jazzy-rosidl-default-runtime       (riptide_msgs)
+
+# --- C++ / Python client libs ---
+rclcpp                      # ros-jazzy-rclcpp
+rclcpp_lifecycle            # ros-jazzy-rclcpp-lifecycle
+rclpy                       # ros-jazzy-rclpy
+ament_index_cpp             # ros-jazzy-ament-index-cpp
+pluginlib                   # ros-jazzy-pluginlib
+
+# --- ros2_control stack ---
+controller_interface        # ros-jazzy-controller-interface
+controller_manager          # ros-jazzy-controller-manager
+hardware_interface          # ros-jazzy-hardware-interface
+joint_state_broadcaster     # ros-jazzy-joint-state-broadcaster
+
+# --- robot description / TF / viz ---
+robot_state_publisher       # ros-jazzy-robot-state-publisher
+xacro                       # ros-jazzy-xacro
+tf2_ros                     # ros-jazzy-tf2-ros
+rviz2                       # ros-jazzy-rviz2
+
+# --- launch ---
+launch                      # ros-jazzy-launch
+launch_ros                  # ros-jazzy-launch-ros
+ros2launch                  # ros-jazzy-ros2launch
+
+# --- message packages ---
+std_msgs                    # ros-jazzy-std-msgs
+geometry_msgs               # ros-jazzy-geometry-msgs
+nav_msgs                    # ros-jazzy-nav-msgs
+builtin_interfaces          # ros-jazzy-builtin-interfaces
+
+# ============================================================================
+# 3. System libraries (apt / pip; resolved by rosdep keys)
+# ============================================================================
+eigen               # libeigen3-dev            (riptide_control, riptide_dynamics)
+python3-numpy       # python3-numpy            (riptide_eval)
+python3-matplotlib  # python3-matplotlib       (riptide_eval — benchmark plots)
+
+# ============================================================================
+# 4. External libraries — NOT rosdep/apt keys, install manually
+# ============================================================================
+# These are picked up by CMake via *_ROOT (env var or -D...). They are the two
+# heavy, non-standard dependencies of the project.
+#
+# --- Pinocchio (riptide_dynamics) — whole-body FK/Jacobian/M/Coriolis ---
+#   CMake: PINOCCHIO_ROOT (env or -D), default ~/.local/pinocchio
+#   Option A (apt):    sudo apt install ros-jazzy-pinocchio
+#                      then export PINOCCHIO_ROOT=/opt/ros/jazzy
+#   Option B (source): build with python/collision OFF, urdf ON into
+#                      ~/.local/pinocchio
+pinocchio           # >= 3.x   (manual: see README "Prerequisites")
+
+# --- MuJoCo SDK (riptide_mujoco) — physics engine (headers + libmujoco) ---
+#   CMake: MUJOCO_ROOT (env or -D), default ~/.mujoco/mujoco-3.10.0
+#   Download the SDK from https://github.com/google-deepmind/mujoco/releases
+#   and unpack it there (or point MUJOCO_ROOT at it).
+mujoco==3.10.0      # manual: SDK under ~/.mujoco/mujoco-3.10.0
+
+# ============================================================================
+# 5. Test dependencies (only needed to run `colcon test`)
+# ============================================================================
+ament_lint_auto             # ros-jazzy-ament-lint-auto
+ament_lint_common           # ros-jazzy-ament-lint-common
+ament_cmake_gtest           # ros-jazzy-ament-cmake-gtest
+ament_copyright             # ros-jazzy-ament-copyright
+ament_flake8                # ros-jazzy-ament-flake8
+ament_pep257                # ros-jazzy-ament-pep257
+
+# ============================================================================
+# Notes
+# ============================================================================
+# - riptide_mujoco is only needed for the real physics path
+#   (use_mock_hardware:=false). The default mock path needs no MuJoCo.
+# - riptide_dynamics (Pinocchio) is required by riptide_control's EE controller.
+# - franka_description / reach_bravo_description_mk2 are vendored in-tree and
+#   need only xacro (already listed).
