@@ -1,15 +1,19 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
 #include "controller_interface/controller_interface.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "pluginlib/class_loader.hpp"
 #include "rclcpp/duration.hpp"
 #include "rclcpp/publisher.hpp"
+#include "rclcpp/subscription.hpp"
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "riptide_msgs/msg/control_debug.hpp"
@@ -63,6 +67,18 @@ private:
   rclcpp::Publisher<riptide_msgs::msg::ControlDebug>::SharedPtr debug_pub_;
   std::string control_law_name_;
   std::uint64_t cycle_{0};
+
+  // Live desired-pose command channel (e.g. the teleop GUI). A PoseStamped on
+  // /riptide/ee_target (world frame) overrides the held target in real time; the
+  // current target is republished (latched) on /riptide/ee_target/current so a
+  // late-joining teleop can seed itself without snapping the EE.
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_current_pub_;
+  std::mutex target_cmd_mutex_;
+  Eigen::Isometry3d target_cmd_pose_{Eigen::Isometry3d::Identity()};
+  std::atomic<bool> have_target_cmd_{false};
+  void target_callback(const geometry_msgs::msg::PoseStamped & msg);
+  void publish_current_target();
 
   // Joint-limit avoidance: a repulsive torque that switches on only within
   // `jla_buffer_` of a limit and grows toward it, applied on top of any law.

@@ -36,6 +36,11 @@ See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full architecture and roadmap.
 
 ## Build & run
 
+Shortcut: **`source build.sh`** does the three lines below in one step (sources
+ROS, builds with `--symlink-install`, sources the overlay). Source it — don't run
+`./build.sh` — so the environment stays in your shell. Extra args pass to colcon,
+e.g. `source build.sh --packages-select riptide_control`.
+
 ```bash
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
@@ -86,6 +91,49 @@ that is a separate axis). `fixed_base:=true` activates a weld constraint that pi
 the AUV base to the world, turning it into a fixed-base manipulator (pair it with
 `base_control:=false`, since station-keeping is moot). Both are hardware
 parameters plumbed launch arg → xacro → `MujocoSystem`.
+
+### Viewing the sim
+
+Two independent views — pass either, or both:
+
+* `rviz:=true` — RViz, driven by `/joint_states` + TF (robot model + frames).
+* `mujoco_viewer:=true` — MuJoCo's **native viewer window**, opened in parallel. It
+  is a read-only mirror of the live sim (arm from `/joint_states`, floating base
+  from `/riptide/odom`): it loads its own copy of the MJCF and only syncs poses,
+  never stepping physics, so it cannot affect the control loop. Requires the
+  `mujoco` Python package in the ROS Python — `pip install --user mujoco==3.10.0`
+  (match the SDK version) — and the MuJoCo path (`use_mock_hardware:=false`).
+
+```bash
+# Same run, seen in both RViz and the MuJoCo viewer:
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee disturbance:=sinusoid \
+    rviz:=true mujoco_viewer:=true
+```
+
+### Teleoperating the end-effector
+
+Drive the desired EE Cartesian pose live with a small GUI (`ee_gui:=true`,
+requires `controller:=ee`):
+
+```bash
+ros2 launch riptide_bringup sim.launch.py \
+    use_mock_hardware:=false controller:=ee ee_gui:=true rviz:=true mujoco_viewer:=true
+```
+
+Press-and-**hold** the arrows to move the target at a constant speed — `±X/±Y/±Z`
+for position and `±Roll/±Pitch/±Yaw` for orientation — and the EE tracks it in
+real time. The GUI publishes `geometry_msgs/PoseStamped` on **`/riptide/ee_target`**
+(world frame); the controller tracks any such message, so you can also script it:
+
+```bash
+ros2 topic pub -r 20 /riptide/ee_target geometry_msgs/msg/PoseStamped \
+  "{header: {frame_id: world}, pose: {position: {x: 0.35, y: 0.0, z: 1.35}, orientation: {w: 1.0}}}"
+```
+
+The controller echoes its current target (latched) on `/riptide/ee_target/current`,
+which the GUI reads once at startup to seed itself — so taking control doesn't snap
+the arm. The GUI needs Tkinter (`sudo apt install python3-tk`).
 
 ### Example scenarios
 

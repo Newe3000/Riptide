@@ -35,6 +35,15 @@ TORQUE_LIMITS = [87, 87, 87, 87, 12, 12, 12]
 WATER_DENSITY = 1000.0     # kg/m^3
 WATER_VISCOSITY = 0.0009   # Pa.s
 
+# --- Inspection target: a subsea pipe the arm reaches out and touches --------
+# Solid cylinder approximating the pipe's outer surface: radius 0.5 m, 25 m long,
+# lying horizontally along world Y, in front of the AUV within the arm's reach.
+# It is a static world geom (collidable), so the EE physically interacts with it.
+# MUST mirror the 'pipe' link in riptide.urdf.xacro (for the RViz visualization).
+PIPE_RADIUS = 0.5          # [m]
+PIPE_LENGTH = 25.0         # [m]
+PIPE_POS = (1.0, 0.0, 1.0)  # world position of the pipe's axis centre [m]
+
 # --- AUV base ("hull" stand-in) ----------------------------------------------
 CUBE_SIZE = 0.6            # full edge length [m]
 HALF = CUBE_SIZE / 2.0
@@ -147,8 +156,19 @@ def main():
 
     # --- seabed floor + EE site ---------------------------------------------
     ET.SubElement(wb, "geom", {
-        "name": "floor", "type": "plane", "size": "10 10 0.1",
+        "name": "floor", "type": "plane", "size": "15 15 0.1",
         "pos": "0 0 0", "rgba": "0.20 0.22 0.24 1",
+    })
+
+    # --- inspection pipe (static, collidable) -------------------------------
+    # MuJoCo cylinders lie along their local Z; rotate +90 deg about X (quat, so
+    # it is independent of the compiler's angle units) to lay it along world Y.
+    ET.SubElement(wb, "geom", {
+        "name": "pipe", "type": "cylinder",
+        "size": f"{PIPE_RADIUS} {PIPE_LENGTH / 2.0}",   # (radius, half-length)
+        "pos": f"{PIPE_POS[0]} {PIPE_POS[1]} {PIPE_POS[2]}",
+        "quat": "0.7071068 0.7071068 0 0",              # +90 deg about X: Z -> Y
+        "rgba": "0.55 0.55 0.60 1",
     })
     for b in root.iter("body"):
         if b.get("name") == "hand":

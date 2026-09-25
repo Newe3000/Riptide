@@ -20,6 +20,17 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
+  <!-- Optional passive MuJoCo viewer (scripts/mujoco_viewer.py). The `mujoco`
+       Python package is a pip dependency, not a rosdep key, so it is not listed
+       here; install it into the ROS Python via pip (mujoco==3.10.0). -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <!-- EE-pose teleop GUI (scripts/ee_target_gui.py) uses Tkinter. -->
+  <exec_depend>python3-tk</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

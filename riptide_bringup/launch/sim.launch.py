@@ -33,6 +33,11 @@ def _reap_stale_sim_processes():
         "mock_base_tf",             # stale mock world->auv_base_link static TF
         "rviz2",
         "disturbance_generator",
+        # NB: match the script filename, NOT bare "mujoco_viewer" — the latter is
+        # also the launch arg (mujoco_viewer:=true), so `pkill -f mujoco_viewer`
+        # would match and kill THIS launch process (and the calling shell).
+        "mujoco_viewer.py",
+        "ee_target_gui.py",
     ):
         subprocess.run(
             ["pkill", "-9", "-f", name],
@@ -143,6 +148,26 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Optional native MuJoCo viewer window that mirrors the sim (read-only),
+    # alongside RViz. Needs the `mujoco` pip package in the ROS Python.
+    mujoco_viewer_node = Node(
+        package="riptide_bringup",
+        executable="mujoco_viewer.py",
+        name="mujoco_viewer",
+        condition=IfCondition(LaunchConfiguration("mujoco_viewer")),
+        output="screen",
+    )
+
+    # Optional EE-pose teleop GUI (Tkinter): press-and-hold arrows publish the
+    # desired Cartesian pose on /riptide/ee_target for the EE controller to track.
+    ee_gui_node = Node(
+        package="riptide_bringup",
+        executable="ee_target_gui.py",
+        name="ee_target_gui",
+        condition=IfCondition(LaunchConfiguration("ee_gui")),
+        output="screen",
+    )
+
     # Floating base: MuJoCo broadcasts world->auv_base_link. On the mock path
     # (no physics) publish a static transform so RViz still has the base frame.
     mock_base_tf = Node(
@@ -193,6 +218,18 @@ def generate_launch_description():
             "rviz",
             default_value="false",
             description="Also open RViz with the Riptide view.",
+        ),
+        DeclareLaunchArgument(
+            "mujoco_viewer",
+            default_value="false",
+            description="Also open MuJoCo's native viewer (mirrors the sim, "
+                        "read-only). Needs `pip install mujoco` in the ROS Python.",
+        ),
+        DeclareLaunchArgument(
+            "ee_gui",
+            default_value="false",
+            description="Open the EE-pose teleop GUI (press-and-hold arrows drive "
+                        "the desired Cartesian pose). Needs controller:=ee.",
         ),
         DeclareLaunchArgument(
             "controller",
@@ -247,4 +284,6 @@ def generate_launch_description():
         mock_base_tf,
         disturbance_node,
         rviz_node,
+        mujoco_viewer_node,
+        ee_gui_node,
     ])

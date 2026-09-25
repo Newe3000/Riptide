@@ -14,3 +14,4 @@ __pycache__/
 # Claude Code per-user local settings
 .claude/settings.local.json
 .claude/*.tmp*
+MUJOCO_LOG.TXT

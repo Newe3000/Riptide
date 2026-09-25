@@ -160,6 +160,13 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
   debug_pub_ = node->create_publisher<riptide_msgs::msg::ControlDebug>(
     "/riptide/control_debug", rclcpp::SystemDefaultsQoS());
 
+  // Live desired-pose command (teleop GUI etc.) + latched current-target echo.
+  target_sub_ = node->create_subscription<geometry_msgs::msg::PoseStamped>(
+    "/riptide/ee_target", rclcpp::QoS(10),
+    [this](const geometry_msgs::msg::PoseStamped & msg) { target_callback(msg); });
+  target_current_pub_ = node->create_publisher<geometry_msgs::msg::PoseStamped>(
+    "/riptide/ee_target/current", rclcpp::QoS(1).transient_local());
+
   RCLCPP_INFO(node->get_logger(),
     "EeStabilizationController configured: %zu joints, law '%s', hydro_compensation=%s.",
     joints_.size(), law.c_str(), hydro ? "on" : "off");
@@ -328,6 +335,15 @@ controller_interface::return_type EeStabilizationController::update(
   // hardware may not have written the state interfaces yet.
   if (!is_finite(state)) { return hold_zero(); }
 
+  // A live pose command (teleop GUI) overrides the held/captured target. Once
+  // one arrives, the initial auto-capture is abandoned in favour of the command.
+  if (have_target_cmd_.load())
+  {
+    std::lock_guard<std::mutex> lock(target_cmd_mutex_);
+    target_.pose = target_cmd_pose_;
+    capture_pending_ = false;
+  }
+
   // Deferred target capture (see on_activate): grab the EE pose from the first
   // finite state. Only commit it if the resulting pose is itself finite.
   if (capture_pending_)
@@ -347,6 +363,10 @@ controller_interface::return_type EeStabilizationController::update(
       return hold_zero();  // model not ready yet; try again next cycle
     }
   }
+
+  // Echo the current target (latched) at ~10 Hz so a teleop GUI can seed itself
+  // to the live pose and avoid snapping the EE when it takes control.
+  if (cycle_ % 25 == 0) { publish_current_target(); }
 
   const auto t_start = std::chrono::steady_clock::now();
   Eigen::VectorXd tau = control_law_->compute(state, target_, period.seconds());
@@ -394,6 +414,41 @@ controller_interface::return_type EeStabilizationController::update(
     debug_pub_->publish(msg);
   }
   return controller_interface::return_type::OK;
+}
+
+void EeStabilizationController::target_callback(const geometry_msgs::msg::PoseStamped & msg)
+{
+  Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+  pose.translation() =
+    Eigen::Vector3d(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z);
+  Eigen::Quaterniond q(
+    msg.pose.orientation.w, msg.pose.orientation.x,
+    msg.pose.orientation.y, msg.pose.orientation.z);
+  if (!pose.translation().allFinite() || q.norm() < 1e-6) { return; }  // ignore junk
+  pose.linear() = q.normalized().toRotationMatrix();
+  {
+    std::lock_guard<std::mutex> lock(target_cmd_mutex_);
+    target_cmd_pose_ = pose;
+  }
+  have_target_cmd_.store(true);
+}
+
+void EeStabilizationController::publish_current_target()
+{
+  if (!target_current_pub_) { return; }
+  geometry_msgs::msg::PoseStamped msg;
+  msg.header.stamp = get_node()->now();
+  msg.header.frame_id = "world";
+  const Eigen::Vector3d p = target_.pose.translation();
+  const Eigen::Quaterniond q(target_.pose.rotation());
+  msg.pose.position.x = p.x();
+  msg.pose.position.y = p.y();
+  msg.pose.position.z = p.z();
+  msg.pose.orientation.w = q.w();
+  msg.pose.orientation.x = q.x();
+  msg.pose.orientation.y = q.y();
+  msg.pose.orientation.z = q.z();
+  target_current_pub_->publish(msg);
 }
 
 }  // namespace riptide_control
