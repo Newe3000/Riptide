@@ -16,7 +16,7 @@ namespace riptide
 /// ImpedanceControlLaw, LqrControlLaw, MpcControlLaw) are pluginlib plugins
 /// hosted by the single EeStabilizationController. compute() is a pure
 /// RobotState -> torque mapping with no ros2_control/MuJoCo dependency, so each
-/// law is unit-testable in isolation and hot-swappable at runtime (R3).
+/// law is unit-testable in isolation and hot-swappable at runtime.
 class IControlLaw
 {
 public:

@@ -1,7 +1,7 @@
 """Bring up the Riptide sim: robot_state_publisher + ros2_control + broadcasters.
 
-Phase 1 uses mock hardware (mock_components/GenericSystem). Swap to MuJoCo in
-Phase 2 with `use_mock_hardware:=false` — no other launch change needed.
+Defaults to mock hardware (mock_components/GenericSystem); switch to MuJoCo with
+`use_mock_hardware:=false` — no other launch change needed.
 """
 
 import subprocess
@@ -18,24 +18,23 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def _reap_stale_sim_processes():
-    """Kill leftover sim processes from a previous run before starting a new one.
+    """Kill leftover sim processes from an earlier run before starting a new one.
 
-    Each ``ros2_control_node`` embeds its OWN MuJoCo world. If a previous launch
-    didn't shut down cleanly (Ctrl-C doesn't always reap it, closing the
-    terminal orphans it), a second one keeps stepping physics and publishing a
-    diverging ``/joint_states`` + ``/tf`` stream. RViz then jumps between the two
-    worlds every message — the robot and base appear to "teleport". Reaping the
-    stale processes here guarantees each launch starts from a single clean sim.
+    Each ``ros2_control_node`` embeds its OWN MuJoCo world. An orphaned one keeps
+    stepping physics and publishing a second, diverging ``/joint_states`` + ``/tf``
+    stream, so RViz jumps between the two worlds every message and the robot and
+    base appear to "teleport". Reaping guarantees each launch starts from a single
+    clean sim.
     """
     for name in (
-        "ros2_control_node",        # the embedded-MuJoCo culprit
-        "robot_state_publisher",    # stale latched /robot_description
-        "mock_base_tf",             # stale mock world->auv_base_link static TF
+        "ros2_control_node",        # embeds the MuJoCo world
+        "robot_state_publisher",    # holds a latched /robot_description
+        "mock_base_tf",             # static world->auv_base_link TF
         "rviz2",
         "disturbance_generator",
-        # NB: match the script filename, NOT bare "mujoco_viewer" — the latter is
-        # also the launch arg (mujoco_viewer:=true), so `pkill -f mujoco_viewer`
-        # would match and kill THIS launch process (and the calling shell).
+        # Match the script filename, not bare "mujoco_viewer": that string is also
+        # the launch arg (mujoco_viewer:=true), so `pkill -f mujoco_viewer` would
+        # match and terminate this launch process (and the calling shell).
         "mujoco_viewer.py",
         "ee_target_gui.py",
     ):

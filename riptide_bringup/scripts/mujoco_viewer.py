@@ -114,8 +114,7 @@ def main():
 
     # Spin ROS in a background thread so subscription callbacks continuously
     # update node.data, while THIS (main) thread owns the GLFW viewer — GLFW must
-    # run on the main thread. (Calling spin_once inside the render loop processed
-    # too few/no callbacks, leaving the window frozen.)
+    # run on the main thread.
     executor = SingleThreadedExecutor()
     executor.add_node(node)
 

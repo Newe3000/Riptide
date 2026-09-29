@@ -1,0 +1,66 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 8 of 10 -- Decide the colcon<->Conan mechanism, then atomically cut over riptide_control + riptide_mujoco to the Conan cores, with msgs marshalling and installed-artifact runtime checks
+Effort: L    Depends on: step 03, step 06, step 07
+========================================================================================
+
+SUMMARY
+  Resolve the colcon/Conan discovery mechanism with a dedicated spike, then in one
+  atomic change flip Pinocchio/Eigen/MuJoCo discovery for BOTH riptide_control and
+  riptide_mujoco to Conan, add the msgs<->POD marshalling, and verify the INSTALLED
+  artifacts resolve the Conan libraries at launch.
+
+WHY THIS STEP
+  This is the most fragile point and the one that must be atomic: flipping only one
+  consumer to Conan-Pinocchio would put two libpinocchio in one controller_manager
+  process and crash. The seam mechanism itself is a real decision the task asked for,
+  and colcon install-time rpath rewriting can silently strip the Conan rpath.
+
+ACTIONS
+  - Spike and DECIDE the discovery mechanism among the three real options, scoped to
+    ONLY riptide_control/riptide_mujoco: (a) a Conan dependency-provider; (b) appending
+    the CMakeDeps output dir to CMAKE_PREFIX_PATH via the colcon environment (append,
+    not a global toolchain); (c) an ament vendor-wrapper package. Record the decision;
+    the correct framing of the risk is that a global Conan toolchain CLOBBERS the ament
+    prefix path and breaks find_package(rclcpp)/rosidl project-wide — so do NOT apply
+    conan_toolchain.cmake to every colcon package.
+  - ATOMIC cutover: in one change, make riptide_dynamics AND riptide_control resolve
+    Pinocchio+Eigen from Conan (drop both PINOCCHIO_ROOT blocks), and riptide_mujoco
+    resolve MuJoCo via find_package(mujoco)+mujoco::mujoco (drop
+    MUJOCO_ROOT+INSTALL_RPATH). riptide_control links
+    riptide_control_core/riptide_dynamics/riptide_geometry (editable) + ament for the
+    ROS half.
+  - Implement the full seam adapters in riptide_control: rclcpp->ParamSource/Logger
+    (from Step 5) PLUS EndEffectorTarget msg->POD and ControlDebug POD->msg
+    bidirectional converters for the live command/telemetry path; switch
+    base_thruster_controller to consume riptide_geometry.
+  - Define an explicit install-rpath policy and verify the INSTALLED (not just built)
+    .so: run ldd on install/…/*.so after colcon install to confirm
+    libpinocchio/libmujoco/libcontrol_core resolve from the Conan cache, not ~/.mujoco
+    or ~/.local/pinocchio, surviving ament's install-time rpath handling.
+  - Full mixed-process check: `ros2 control list_controllers` loads the controllers +
+    impedance law; run the EE-stabilization-under-disturbance demo end-to-end; confirm
+    Boost/Eigen coexistence holds in the live process (extends the Step-6 canary).
+
+DELIVERABLES
+  - A recorded discovery-mechanism decision (one of the three), scoped to the ROS glue
+  - A fully integrated workspace: eigen/pinocchio/mujoco + first-party cores from Conan;
+    msgs/controllers/hardware stay colcon; sim.launch.py runs unchanged
+  - Complete config/logging + EndEffectorTarget + ControlDebug marshalling at the seam
+  - An installed-artifact rpath policy + verification
+
+ACCEPTANCE (this step is done when)
+  - colcon build with the chosen (non-clobbering) mechanism completes and
+    find_package(rclcpp)/rosidl still resolve across all packages
+  - sim.launch.py runs the EE-stabilization-under-disturbance demo end-to-end
+  - ldd on the INSTALLED controller/hardware .so shows libpinocchio/libmujoco resolving
+    from the Conan cache
+  - No two-libpinocchio / Boost-ODR symptoms in the live controller_manager
+
+RISKS / WATCH-OUTS
+  - A global Conan toolchain clobbering the ament prefix path breaks the whole workspace
+    — mitigated by the scoped mechanism decision
+  - colcon install rewriting/stripping RPATH so the installed .so can't find Conan libs
+    — caught by the installed-artifact ldd, not the build-tree one
+  - The single-process ABI mix (incl. Boost 1.84 vs 1.83) makes the Step-2 profile load-
+    bearing here
+

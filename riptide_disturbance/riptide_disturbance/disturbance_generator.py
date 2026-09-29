@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish external disturbances for the Riptide sim (R4).
+"""Publish external disturbances for the Riptide sim.
 
 Two physically distinct disturbance channels are published every tick; the
 inactive one is held at zero so switching `scenario` live cleanly resets it:

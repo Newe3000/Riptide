@@ -1,0 +1,52 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 5 of 10 -- De-ROS IControlLaw in place (behavior-preserving), supporting declare-with-default parameters — the linchpin refactor
+Effort: L    Depends on: step 01
+========================================================================================
+
+SUMMARY
+  Replace rclcpp NodeParameters/NodeLogging in IControlLaw with a core-owned ParamSource
+  that supports declare+default+typed-get plus a std::function logger, updating all four
+  laws and the controller, while keeping behavior identical against the Step-1 golden
+  baseline. Pure C++, no Conan dependency.
+
+WHY THIS STEP
+  VERIFIED the core is not rclcpp-free: control_law_interface.hpp includes rclcpp node
+  interfaces and the law bodies call declare_parameter(...). A plain POD would silently
+  drop ROS parameter declaration/override semantics, so the abstraction must model
+  declaration, not just reads. This is the true crux of the core/ROS split and, being
+  pure refactoring, runs in parallel with Steps 2-4.
+
+ACTIONS
+  - Introduce a core ParamSource abstraction: declare<T>(name, default) + get<T>(name),
+    and a Logger std::function, so configure()+compute() include only <Eigen> +
+    riptide_dynamics.
+  - Change IControlLaw::on_configure to take (ParamSource&, Logger,
+    std::shared_ptr<IDynamicsModel>) instead of the two rclcpp SharedPtrs; update
+    task_space_{impedance,lqr,mpc,template}.cpp to call params.declare(name,
+    def)/params.get(name) via the abstraction.
+  - In riptide_control, write the rclcpp adapter that implements ParamSource by
+    forwarding declare back onto NodeParametersInterface and reads via get_parameter —
+    keeping ROS parameter override behavior intact. Wire ee_stabilization_controller.cpp
+    to it. (Files stay in riptide_control for now; extraction is Step 7.)
+  - Run the Step-1 golden harness after the change: the four laws must reproduce the
+    recorded torque vectors bit-for-bit.
+  - Confirm the grep fitness check now passes for the control-law math files (no
+    rclcpp/pluginlib tokens remain in them).
+
+DELIVERABLES
+  - A de-rclcpp'd IControlLaw + ParamSource/Logger abstraction
+  - An rclcpp->ParamSource adapter in riptide_control preserving parameter
+    declaration/override
+  - Golden-baseline proof of behavior preservation
+
+ACCEPTANCE (this step is done when)
+  - colcon build + sim.launch.py run the EE-stabilization demo unchanged
+  - The golden harness reproduces the Step-1 fixture exactly
+  - grep confirms the control-law math files no longer reference rclcpp
+
+RISKS / WATCH-OUTS
+  - The on_configure change ripples to all four laws + ee_stabilization_controller — a
+    breaking refactor done behind unchanged behavior, guarded by the golden baseline
+  - A hidden rclcpp use inside a compute() body — the grep gate catches it before Step 7
+    packaging
+

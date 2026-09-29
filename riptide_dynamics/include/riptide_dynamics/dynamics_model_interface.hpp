@@ -14,7 +14,7 @@ namespace riptide
 /// LQR, MPC). A control law owns one of these and refreshes it via update();
 /// this keeps physics out of the ros2_control I/O path (see PROJECT_PLAN §2/§6).
 ///
-/// Backends (Phase 2): PinocchioModel (primary), MujocoModel (oracle/cross-check).
+/// Backends: PinocchioModel (primary), MujocoModel (oracle/cross-check).
 class IDynamicsModel
 {
 public:

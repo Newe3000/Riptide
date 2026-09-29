@@ -1,0 +1,65 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 10 of 10 -- Consumer docs, a clean-container non-ROS example, and declare the multi-Conan-package end state
+Effort: M    Depends on: step 07, step 08, step 09
+========================================================================================
+
+SUMMARY
+  Prove the payoff with a standalone example that runs a control loop with zero ROS
+  (leading with geometry-only, then the full pinocchio-backed loop), write honest
+  consumer docs, and record the final cutover decision, reaching the end state where the
+  ROS/sim layer consumes the same Conan packages.
+
+WHY THIS STEP
+  The migration's value is only real once an external consumer can build the cores with
+  no ROS/no ~/.mujoco/no ~/.local/pinocchio; foregrounding the eigen-only geometry
+  example keeps the adoption barrier low even though the full loop needs the deeper
+  Pinocchio graph.
+
+ACTIONS
+  - Create examples/standalone_control_loop/: a plain-CMake project OUTSIDE colcon with
+    its own conanfile requiring riptide_control_core + riptide_dynamics +
+    riptide_geometry from the private remote; it loads the vendored fer URDF via the
+    Conan Pinocchio, builds a RobotState, instantiates TaskSpaceImpedance through the
+    ROS-free IControlLaw, and runs a closed-loop compute() against a scripted EE target.
+  - Lead the docs with a geometry-only micro-example (eigen-only, no Pinocchio) as the
+    frictionless wider-use proof, then the full loop; promote the test_packages to
+    double as minimal examples.
+  - Write per-package consumer docs: add the private remote + center2.conan.io, the
+    profile, the requires line, the editable dev flow, and an HONEST section on the
+    third-party situation — MuJoCo is a repackaged prebuilt SDK; Pinocchio is conan-
+    center/3.8.0 with collision off (no coal) and the Boost 1.84-vs-1.83 coexistence
+    caveat.
+  - Update docs/ARCHITECTURE.md to describe the two consumption modes (pure Conan for
+    external users; colcon + the Step-8 mechanism for the ROS sim). Add the example to
+    CI in a clean container (no ROS, no ~/.mujoco, no ~/.local/pinocchio) so it cannot
+    rot.
+  - Record the final cutover decision: cores are Conan-first with colcon consuming
+    prebuilt binaries (editable only for active core dev); dropping package.xml from the
+    L1 cores is an optional last move, allowed only after Step 8 is proven and the full
+    sim passes — document whether dual-build stays permanently or ament is shed.
+
+DELIVERABLES
+  - END STATE: eigen/boost/urdfdom/pinocchio/mujoco + riptide_dynamics +
+    riptide_control_core + riptide_geometry are versioned Conan packages proven to run a
+    control loop with zero ROS, while the ROS/ros2_control + MuJoCo sim consume the same
+    packages
+  - A CI-guarded standalone example (geometry-only + full loop)
+  - Honest per-package consumer docs and an updated architecture doc
+  - A recorded final cutover decision
+
+ACCEPTANCE (this step is done when)
+  - In a fresh container with only Conan + the private remote (no ROS, no ~/.mujoco, no
+    ~/.local/pinocchio), `conan install && cmake && ctest` in examples/ runs the control
+    loop to completion
+  - Independently, colcon build + sim.launch.py still run the full EE-stabilization-
+    under-disturbance demo
+  - grep confirms no *_ROOT / hand-set INSTALL_RPATH hacks remain in any package
+
+RISKS / WATCH-OUTS
+  - The example accidentally relying on a sourced ROS env or system pinocchio — building
+    it in a clean CI container is the proof
+  - Docs/version drift — version numbers come from the git tag and the example is built
+    in CI
+  - Removing package.xml prematurely breaks lingering ament_target_dependencies — gated
+    behind a green Step 8 + full sim
+

@@ -1,0 +1,53 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 1 of 10 -- Freeze the package taxonomy and layer rules, audit the boundary violations, and record a golden-output baseline (move no code)
+Effort: M    Depends on: nothing (can start now)
+========================================================================================
+
+SUMMARY
+  Fix the target multi-Conan-package graph and the downward-only dependency invariant,
+  write the verified violation list and an automated grep fitness check, and capture
+  behavior-preserving golden outputs for the control laws before anything moves.
+
+WHY THIS STEP
+  Every later step needs a fixed target and a machine-checkable invariant; the de-ROS
+  refactor (Step 5) is a breaking change whose only trustworthy safety net is a golden
+  baseline recorded while the code is still untouched.
+
+ACTIONS
+  - Write an ADR + update docs/ARCHITECTURE.md fixing the layers: L0 third-party via
+    Conan (eigen/boost/urdfdom/pinocchio from conan-center, mujoco custom); L1 pure
+    cores riptide_dynamics + riptide_control_core + riptide_geometry; L2 riptide_msgs
+    (rosidl, stays colcon); L3 ROS glue riptide_control + riptide_mujoco; L4 apps.
+    Record each package's public-header API surface, name, requires, and consumers.
+  - Document the VERIFIED violations to remove: (a) control_law_interface.hpp:6-7
+    include rclcpp node_{parameters,logging}_interface and on_configure takes those
+    SharedPtrs; (b) task_space_impedance.cpp:19 / task_space_lqr.cpp:22 call
+    params->declare_parameter(...); (c) ee_stabilization_controller.{hpp,cpp} include
+    riptide_msgs and publish ControlDebug; (d) PINOCCHIO_ROOT+INSTALL_RPATH in
+    riptide_dynamics & riptide_control CMake; (e) MUJOCO_ROOT
+    find_path/find_library+INSTALL_RPATH in riptide_mujoco.
+  - Write a runnable grep fitness script asserting no
+    rclcpp/pluginlib/controller_interface/rosidl/riptide_msgs tokens under the future L1
+    include/src dirs; it must reproduce the documented leak list exactly today (it will
+    pass for dynamics, fail-as-expected for the control-law files still in
+    riptide_control).
+  - Add a golden-output harness (extend test/test_control_laws.cpp): for fixed
+    RobotState + EndEffectorTarget inputs, dump compute() torque vectors for all four
+    laws to a checked-in fixture file.
+
+DELIVERABLES
+  - ADR + updated docs/ARCHITECTURE.md with the frozen graph, per-package API, and the
+    written violation list
+  - A runnable grep fitness script (for CI in Step 9)
+  - A checked-in golden-output fixture + harness for the four control laws
+
+ACCEPTANCE (this step is done when)
+  - colcon build + sim.launch.py run unchanged (no source touched)
+  - The grep audit output matches the documented leak list exactly
+  - The golden harness reproduces its own fixture deterministically across two runs
+
+RISKS / WATCH-OUTS
+  - Over-designing one-consumer packages — mitigated by requiring each L1 package name
+    three real consumers before it is promoted
+  - Missing a transitive rclcpp leak — the automated grep is the guard, not human review
+

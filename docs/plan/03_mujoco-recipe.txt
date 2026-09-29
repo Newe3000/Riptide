@@ -1,0 +1,48 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 3 of 10 -- Author the MuJoCo Conan recipe (the only recipe that must be authored; done before its consumer)
+Effort: S    Depends on: step 02
+========================================================================================
+
+SUMMARY
+  Make MuJoCo consumable as mujoco/3.10.0 with no compiler build by repackaging the
+  upstream prebuilt SDK, correctly preserving the soname symlink chain and exporting the
+  mujoco::mujoco target the existing CMake expects.
+
+WHY THIS STEP
+  MuJoCo is the one genuinely-absent recipe, but it is tractable (prebuilt blob);
+  authoring it before riptide_mujoco is rewired keeps the dependency-first rule and
+  unblocks the seam step.
+
+ACTIONS
+  - Write recipes/mujoco/conanfile.py: source()/build() use conan.tools.files.get() on
+    the prebuilt SDK tarball with conandata.yml holding url+sha256 per version;
+    no_copy_source.
+  - package() stages include/mujoco + lib/libmujoco.so* using copy(..., symlinks=True)
+    so libmujoco.so -> .so.3.10 -> .so.3.10.0 is preserved (dereferencing breaks soname
+    resolution at load).
+  - package_id() deletes compiler/build_type/cppstd and keys on os+arch+version only;
+    cpp_info.libs=['mujoco'], cpp_info.set_property('cmake_file_name','mujoco'),
+    set_property('cmake_target_name','mujoco::mujoco') to match riptide_mujoco's
+    find_package(mujoco)+mujoco::mujoco.
+  - test_package: include <mujoco/mujoco.h>, mj_loadXML a tiny model, mj_step once, run
+    under VirtualRunEnv so libmujoco resolves.
+  - conan create + upload to the private remote; note the prebuilt SDK's glibc floor and
+    record the minimum runner it supports.
+
+DELIVERABLES
+  - mujoco/3.10.0 binaries on the private remote
+  - One recipe covering future versions via conandata.yml
+  - A test_package that actually steps physics
+
+ACCEPTANCE (this step is done when)
+  - conan create + test_package green on a clean machine with no MUJOCO_ROOT set
+  - `conan list mujoco/3.10.0:*` shows one os/arch/version-keyed package id
+  - find_package(mujoco) in a scratch CMake project resolves mujoco::mujoco and the
+    soname chain is intact (ldd on the test_package binary)
+
+RISKS / WATCH-OUTS
+  - Symlink chain flattened at package() → soname load failure (guarded by the ldd
+    acceptance)
+  - Prebuilt glibc floor breaks older CI runners — pin the runner image
+  - Redistribution: MuJoCo is Apache-2.0, low risk — record the license
+

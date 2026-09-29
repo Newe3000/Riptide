@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
   <!--
-    AUV base: a plain cube stand-in for the hull (per request).
+    AUV base: a plain cube stand-in for the hull.
 
-    Phase 3: the base is FLOATING. The world->base joint is of type "floating",
+    The base is FLOATING. The world->base joint is of type "floating",
     so robot_state_publisher does not publish that transform — instead the
     MuJoCo SystemInterface broadcasts world->${name}_link TF from the simulated
     free-joint pose (and exposes base pose/twist as a ros2_control sensor).

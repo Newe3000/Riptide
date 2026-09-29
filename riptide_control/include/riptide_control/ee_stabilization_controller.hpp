@@ -94,8 +94,8 @@ private:
 
   // The EE hold target is captured on the first update() cycle whose measured
   // state is finite, not in on_activate(): at activation the hardware's first
-  // read() may not have run yet, so the state interfaces still read NaN and a
-  // capture there would poison the target (and thus every torque) with NaN.
+  // read() may not have run yet, so the state interfaces can still read NaN,
+  // which would propagate into the target and every torque.
   bool capture_pending_{false};
 };
 

@@ -14,9 +14,9 @@
 namespace riptide_control
 {
 
-/// Base dynamic-positioning controller (Phase 4b). Reads the floating-base
-/// sensor and drives the hull thrusters to station-keep the AUV, so the arm's
-/// EE controller no longer fights an unbounded base drift.
+/// Base dynamic-positioning controller. Reads the floating-base sensor and
+/// drives the hull thrusters to station-keep the AUV, so the arm's EE controller
+/// does not fight unbounded base drift.
 ///
 /// The base is FULLY ACTUATED: the thruster bank spans all 6 rigid-body DOFs,
 /// each with its own PD gain (any pair may be 0 to leave that DOF compliant):

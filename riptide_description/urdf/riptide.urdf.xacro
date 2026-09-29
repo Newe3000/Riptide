@@ -5,7 +5,7 @@
     Top-level assembly consumed by robot_state_publisher and ros2_control.
   -->
 
-  <!-- Phase 1 uses mock hardware; set to false in Phase 2 to load MuJoCo. -->
+  <!-- Mock hardware by default; set to false to load the MuJoCo backend. -->
   <xacro:arg name="use_mock_hardware" default="true"/>
   <!-- Franka model + joint-name prefix (fer_joint1..7). -->
   <xacro:arg name="arm_type" default="fer"/>
@@ -20,7 +20,7 @@
   <xacro:include filename="$(find riptide_description)/urdf/riptide.ros2_control.xacro"/>
   <xacro:include filename="$(find riptide_description)/urdf/franka_fer.xacro"/>
 
-  <!-- World anchor. Phase 3 replaces this fixed attachment with a free joint. -->
+  <!-- World anchor that the floating base attaches to. -->
   <link name="world"/>
 
   <!-- Cube hull: 0.6 m, 80 kg (matches the MuJoCo scene). -->

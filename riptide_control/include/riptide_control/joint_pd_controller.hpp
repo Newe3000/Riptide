@@ -17,9 +17,9 @@ namespace riptide_control
 ///
 /// This is the simplest thing that visibly demonstrates torque control through
 /// the full ros2_control stack: with it, the arm holds its target pose against
-/// gravity; without it, the arm collapses. It is also the seed of the Phase 2
-/// baseline loop — later replaced/augmented by the task-space IControlLaw
-/// plugins (PID, impedance, LQR, MPC).
+/// gravity; without it, the arm collapses. It serves as the baseline loop; the
+/// task-space IControlLaw plugins (PID, impedance, LQR, MPC) provide the fuller
+/// control approaches.
 class JointPdController : public controller_interface::ControllerInterface
 {
 public:

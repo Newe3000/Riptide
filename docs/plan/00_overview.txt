@@ -1,0 +1,192 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION -- OVERVIEW
+========================================================================================
+
+VISION
+  Riptide becomes a multi-Conan-package project whose reusable C++ cores —
+  riptide_dynamics, riptide_control_core, and the eigen-only riptide_geometry leaf — are
+  versioned, published, and consumable entirely outside this ROS workspace (proven by a
+  clean-container example that runs a closed-loop control step with zero ROS sourced),
+  while the ros2_control controllers, the MuJoCo hardware plugin, and `ros2 launch
+  riptide_bringup sim.launch.py` keep working by consuming those same Conan packages
+  plus Conan-provided Eigen/Pinocchio/MuJoCo. Reaching that end state unlocks wider use
+  because the physics and control-law math stop being welded to rclcpp, pluginlib,
+  rosidl, and machine-specific PINOCCHIO_ROOT/MUJOCO_ROOT installs, and instead ship as
+  ABI-coherent, semver'd binaries any C++ project can pull. The migration is strangler-
+  style: colcon build and the EE-stabilization-under-disturbance demo stay green at
+  every one of the ordered steps.
+
+PRINCIPLES
+   1. Strangler, never big-bang: `colcon build` and `ros2 launch riptide_bringup
+      sim.launch.py` must stay green after every step; each step is independently
+      reviewable and independently revertible.
+   2. Downward-only layer rule, machine-enforced: the L1 cores (riptide_dynamics,
+      riptide_control_core, riptide_geometry) must not include rclcpp / pluginlib /
+      controller_interface / rosidl / riptide_msgs; a grep fitness gate in CI fails the
+      build if a token leaks into an L1 public header or TU.
+   3. Reuse conan-center; author a recipe only for the verified delta. Confirmed
+      available: eigen, boost, urdfdom, and pinocchio/3.8.0 (with_collision_support
+      defaults False, so no coal recipe is needed). The only recipe that must be
+      authored is MuJoCo (repackage the upstream prebuilt SDK); Pinocchio is a
+      pin+evaluate, not an author-from-scratch.
+   4. Dependency-first: every external library (MuJoCo, Pinocchio) is created, uploaded,
+      and test_package-verified on the private remote BEFORE any first-party package is
+      flipped to consume it.
+   5. ABI coherence is load-bearing, and it is more than libcxx: one checked-in Conan
+      profile must match the exact toolchain the apt ros-jazzy binaries were built with
+      — gcc major version, compiler.libcxx=libstdc++11 with _GLIBCXX_USE_CXX11_ABI=1
+      confirmed by readelf on a real ros-jazzy .so, compiler.cppstd matching
+      gnu17-vs-17, build_type=Release with NDEBUG, and uniform Eigen
+      alignment/vectorization flags across all TUs.
+   6. Eigen AND Boost are version-locked and encoded in package_id, because both cross
+      the single-process seam: a Conan-built controller/dynamics .so is dlopen'd into
+      the same controller_manager as apt-built tf2/rclcpp. Eigen is pinned to the system
+      version; Boost coexistence (Conan >=1.84 vs apt 1.83) is explicitly contained and
+      verified, not assumed safe.
+   7. Atomic third-party cutover: any package's Pinocchio/Eigen discovery flips together
+      with every sibling loaded in the same controller_manager process; the sim is never
+      left in a two-libpinocchio mixed state. Under plain colcon the cores keep
+      resolving the SAME Pinocchio the controllers do until both are cut over in one
+      change.
+   8. Behavior-preserving refactors: golden compute() outputs for fixed
+      RobotState+target inputs are recorded BEFORE the de-ROS interface change and must
+      reproduce bit-for-bit after it; the ported unit tests are not the only safety net.
+   9. riptide_msgs stays rosidl/colcon forever; the core/ROS seam is crossed only by
+      explicit POD<->msg converters (config, logging, EndEffectorTarget, ControlDebug),
+      never by leaking a rosidl type into a core.
+  10. Portability is proven, not asserted: the acceptance gate is a clean-cache/clean-
+      container build with no ROS, no ~/.mujoco, and no ~/.local/pinocchio — 'no ROS
+      sourced on the dev box' is explicitly not accepted as proof.
+
+TARGET CONAN PACKAGE TAXONOMY (end state)
+  * eigen (conan-center, pinned)
+      contents: Header-only linear algebra, pinned to the EXACT version rosdep/apt
+      installed (libeigen3-dev, expected 3.4.0) so Conan Eigen == system Eigen.
+      CMakeDeps exports the same Eigen3::Eigen target the repo already links, making the
+      swap a no-op for consumer CMake. Alignment/vectorization/NDEBUG flags kept uniform
+      across all consumers.
+      requires: none (header-only)
+      consumers: riptide_dynamics, riptide_control_core, riptide_geometry, pinocchio
+      (transitive_headers), and every ROS package transitively via the cores.
+
+  * boost (conan-center, ABI-managed)
+      contents: Pinocchio's transitive dependency (serialization/filesystem/system).
+      Recipe range is >=1.84 <1.90 while apt ROS Jazzy ships 1.83, so this is the second
+      ODR/ABI landmine: its version is locked in package_id and its containment inside
+      libpinocchio.so is verified (boost symbols must not cross the .so boundary the ROS
+      controllers resolve). Not a first-party concern to expose, but explicitly tracked,
+      not ignored.
+      requires: none
+      consumers: pinocchio only (must not surface boost into any first-party core's
+      public API).
+
+  * mujoco (custom internal recipe — the ONLY recipe that must be authored)
+      contents: MuJoCo SDK. Recipe get()s upstream's prebuilt per-version tarball
+      (mujoco-3.10.0-linux-x86_64) via conandata.yml url+sha256; package() stages
+      include/mujoco + lib/libmujoco.so* preserving the soname symlink chain
+      (copy(symlinks=True)); no compiler build. package_id deletes
+      compiler/build_type/cppstd (C API blob), keys on os+arch+version. cpp_info sets
+      cmake_file_name=mujoco and cmake_target_name=mujoco::mujoco to match the existing
+      find_package(mujoco). test_package mj_loadXML+mj_step under VirtualRunEnv.
+      requires: none (prebuilt blob)
+      consumers: riptide_mujoco (replaces MUJOCO_ROOT find_path/find_library + hand-set
+      INSTALL_RPATH). The pip mujoco/glfw for mujoco_viewer.py stays a separate Python
+      concern.
+
+  * pinocchio/3.8.0 (conan-center — PIN & evaluate, author only the delta)
+      contents: Rigid-body dynamics. VERIFIED on conan-center: options include
+      with_collision_support (default False → no coal needed, and Riptide computes no
+      collision), Python interface disabled by default; requires eigen (>=3.4.0,
+      transitive_headers), urdfdom/4.0.0 (transitive_headers), boost (>=1.84,
+      transitive_headers). Consumed with with_collision_support=False, eigen pinned to
+      the system version, boost version locked in package_id. Fall back to a forked
+      local recipe ONLY if a needed option/version is missing — not an author-from-
+      scratch task.
+      requires: eigen, urdfdom, boost (all conan-center)
+      consumers: riptide_dynamics (and transitively riptide_control via the atomic
+      cutover). Replaces the PINOCCHIO_ROOT + INSTALL_RPATH hack in riptide_dynamics AND
+      riptide_control.
+
+  * riptide_dynamics (first-party core — Layer 1)
+      contents: IDynamicsModel virtual interface, PinocchioModel (M, C+g, EE
+      Jacobian/pose in world, optional hydro drag), RobotState + EndEffectorTarget POD
+      structs. Verified ROS-agnostic today (only comments mention ROS). package_type
+      shared-library.
+      requires: eigen, pinocchio
+      consumers: riptide_control_core, riptide_control (ROS glue), the standalone non-
+      ROS example. First package converted.
+
+  * riptide_control_core (first-party core — Layer 1)
+      contents: The control-law math after de-ROS'ing: operational_space.hpp, the de-
+      rclcpp'd IControlLaw (on_configure takes a core ParamSource supporting declare-
+      with-default + typed get<>() plus a std::function logger, NOT rclcpp
+      NodeParameters/NodeLogging SharedPtrs), and TaskSpace{Impedance,Lqr,Mpc,Template}
+      compute() bodies WITHOUT PLUGINLIB_EXPORT_CLASS. Also the
+      EndEffectorTarget/ControlDebug POD mirrors the seam marshals to.
+      requires: riptide_dynamics, riptide_geometry, eigen
+      consumers: riptide_control (thin ros2_control wrappers + rclcpp->ParamSource
+      adapter), the standalone non-ROS example.
+
+  * riptide_geometry (first-party leaf — Layer 1, eigen-only, FOREGROUNDED)
+      contents: The genuinely reusable, dependency-light math and the strongest wider-
+      use proof: the thruster allocation-matrix build + regularized pseudo-inverse from
+      base_thruster_controller.cpp (A = 6xN wrench columns; alloc_pinv_ = A^T (A A^T +
+      reg)^-1, verified clean Eigen) and the SO(3)/SE(3) error helpers from
+      operational_space.hpp. Header-mostly, eigen-only pure leaf.
+      requires: eigen
+      consumers: riptide_control_core, the base-thruster controller path in
+      riptide_control, and the standalone example (three real consumers — not optional).
+
+  * riptide_msgs (STAYS rosidl / colcon — deliberately NOT a Conan package)
+      contents: EndEffectorTarget, DisturbanceCommand, ControlDebug. Inherently rosidl-
+      typesupport-coupled. Getting it OUT of the cores (crossed only by POD<->msg
+      converters at the wrapper layer) is precisely what makes the cores externally
+      consumable.
+      requires: rosidl (via ament)
+      consumers: riptide_control, riptide_mujoco, riptide_disturbance, riptide_eval —
+      all via ament, never via Conan.
+
+  * riptide_control / riptide_mujoco (ROS glue — Layer 3, colcon, CONSUME Conan)
+      contents: riptide_control keeps only the pluginlib ros2_control controllers
+      (JointPd/EeStabilization/BaseThruster), the PLUGINLIB_EXPORT_CLASS registration
+      TUs, and a new adapter set: rclcpp->ParamSource/Logger (forwarding
+      declare_parameter back onto NodeParametersInterface) plus EndEffectorTarget
+      msg<->POD and ControlDebug POD<->msg marshalling. riptide_mujoco keeps the
+      SystemInterface plugin, swaps MUJOCO_ROOT for find_package(mujoco)+mujoco::mujoco.
+      Both drop their PINOCCHIO_ROOT/INSTALL_RPATH blocks and consume the cores via
+      Conan (editable in dev).
+      requires: riptide_control_core, riptide_dynamics, riptide_geometry, pinocchio,
+      mujoco (Conan);
+      rclcpp/pluginlib/controller_interface/hardware_interface/riptide_msgs (ament)
+      consumers: riptide_bringup / description / disturbance / eval (apps, Layer 4,
+      unchanged colcon).
+
+STEPS (read the NN_*.txt files in order)
+  01  Freeze the package taxonomy and layer rules, audit the boundary violations, and record a golden-output baseline (move no code)
+        [M; start]  -> 01_freeze-taxonomy-audit-golden-baseline.txt
+  02  Stand up Conan 2 tooling, a Jazzy-matched ABI profile, a private remote, and prove Eigen + Boost policy
+        [M; after 1]  -> 02_conan-toolchain-jazzy-abi-profile.txt
+  03  Author the MuJoCo Conan recipe (the only recipe that must be authored; done before its consumer)
+        [S; after 2]  -> 03_mujoco-recipe.txt
+  04  Pin conan-center pinocchio/3.8.0, evaluate the recipe, author only the delta (the honest, de-scoped hard problem)
+        [M; after 2]  -> 04_pinocchio-pin-and-delta.txt
+  05  De-ROS IControlLaw in place (behavior-preserving), supporting declare-with-default parameters — the linchpin refactor
+        [L; after 1]  -> 05_deros-icontrollaw.txt
+  06  Conanize riptide_dynamics (first first-party package) with dual-build, editable mode, and an early mixed-process ABI canary
+        [M; after 2,4]  -> 06_conanize-dynamics-with-abi-canary.txt
+  07  Extract riptide_geometry (eigen-only leaf) and riptide_control_core as Conan packages
+        [L; after 5,6]  -> 07_extract-control-core-and-geometry.txt
+  08  Decide the colcon<->Conan mechanism, then atomically cut over riptide_control + riptide_mujoco to the Conan cores, with msgs marshalling and installed-artifact runtime checks
+        [L; after 3,6,7]  -> 08_seam-cutover-atomic.txt
+  09  CI, binary hosting, semver + package_id policy, and committed lockfiles
+        [M; after 3,4,6,7,8]  -> 09_ci-hosting-versioning-lockfiles.txt
+  10  Consumer docs, a clean-container non-ROS example, and declare the multi-Conan-package end state
+        [M; after 7,8,9]  -> 10_consumer-docs-example-cutover.txt
+
+HOW TO USE THIS PLAN
+  Each step is independently reviewable and revertible, and keeps `colcon build` and
+  `ros2 launch riptide_bringup sim.launch.py` green. Work them in order; the dependency
+  notes show what may run in parallel. The end state (after step 10) is a project of
+  multiple Conan packages: the reusable C++ cores ship as versioned Conan libraries
+  consumable outside ROS, while the ros2_control / MuJoCo layer consumes them. See
+  ../ARCHITECTURE.md for the current structure.
+

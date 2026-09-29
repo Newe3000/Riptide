@@ -51,10 +51,10 @@ controller_interface::CallbackReturn EeStabilizationController::on_init()
   // arm sits on top of the 0.6 m hull, so its root is +0.3 m in z.
   auto_declare<std::vector<double>>("base_to_arm_offset", {0.0, 0.0, 0.3});
   // Hydrodynamic drag compensation. OFF by default: cancelling the arm's drag is
-  // ANTI-DAMPING (it removes the beneficial damping the water provides), and with
-  // an over-estimating model it destabilizes under fast motion (measured: EE RMS
-  // 41 cm -> 145 cm at a 120 N current). The mismatch is favorable; the hydro
-  // model is kept for study / future MPC prediction. Fluid params match the MJCF.
+  // anti-damping (it removes the beneficial damping the water provides), and with
+  // an over-estimating model it destabilizes under fast motion. The favorable
+  // mismatch is kept; the hydro model remains for study / future MPC prediction.
+  // Fluid params match the MJCF.
   auto_declare<bool>("hydro_compensation", false);
   auto_declare<double>("fluid_density", 1000.0);
   auto_declare<double>("fluid_viscosity", 0.0009);
@@ -242,7 +242,7 @@ controller_interface::CallbackReturn EeStabilizationController::on_activate(
 
   // Defer capturing the EE hold target to the first update() with a finite
   // state. At activation the hardware's first read() may not have populated the
-  // state interfaces yet (they read NaN), which would poison the target. Until
+  // state interfaces yet (they read NaN), which would corrupt the target. Until
   // the capture happens, target_ holds the configured fallback from on_configure.
   capture_pending_ = get_node()->get_parameter("capture_target_on_activate").as_bool();
   return controller_interface::CallbackReturn::SUCCESS;

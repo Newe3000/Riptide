@@ -1,0 +1,58 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 6 of 10 -- Conanize riptide_dynamics (first first-party package) with dual-build, editable mode, and an early mixed-process ABI canary
+Effort: M    Depends on: step 02, step 04
+========================================================================================
+
+SUMMARY
+  Convert the verified-ROS-agnostic core into a versioned Conan package that also still
+  builds under colcon, and — the first time a Conan-built .so exists — dlopen it into a
+  live controller_manager to prove the ABI profile before the seam is rewired.
+
+WHY THIS STEP
+  riptide_dynamics is the lowest-risk core to exercise the full Conan workflow, and it
+  produces the first Conan-built binary, giving the earliest possible chance to validate
+  the load-bearing mixed-process ABI assumption instead of discovering it at the very
+  end.
+
+ACTIONS
+  - Add riptide_dynamics/conanfile.py (set_version from git describe,
+    package_type=shared-library, requires eigen+pinocchio, generators
+    CMakeToolchain+CMakeDeps, cmake_layout, cpp_info.requires so consumers inherit
+    pinocchio+eigen).
+  - Make CMakeLists dual-mode: keep find_package(Eigen3)/find_package(pinocchio) —
+    CMakeDeps emits the same target names ament used, so target_link_libraries is
+    unchanged; on the Conan path DELETE the PINOCCHIO_ROOT block and INSTALL_RPATH
+    (CMakeDeps sets rpath); guard ament_export_*/ament_package() behind a toolchain-
+    defined variable. Keep package.xml.
+  - CRITICAL ordering guard: leave the plain-colcon default path resolving the SAME
+    Pinocchio riptide_control still uses (~/.local via PINOCCHIO_ROOT). Conan-Pinocchio
+    is exercised only via conan create / test_package / the standalone example — never
+    inside the sim — until the atomic cutover in Step 8. This is what prevents a two-
+    libpinocchio process.
+  - Add test_package (construct PinocchioModel, call massMatrix()/Jacobian/EE pose)
+    under VirtualRunEnv; register `conan editable add riptide_dynamics`.
+  - Early ABI canary: build a Conan-toolchain riptide_dynamics.so and dlopen it (via a
+    throwaway hardware/controller shim) into a running controller_manager; verify no
+    ODR/symbol breakage and that Eigen/Boost coexist safely.
+
+DELIVERABLES
+  - The first published first-party Conan package, still colcon-buildable, with a
+    test_package proving it runs outside ROS
+  - Editable-mode dev loop registered
+  - A passing early mixed-process ABI canary report
+
+ACCEPTANCE (this step is done when)
+  - conan create riptide_dynamics + test_package green in a shell with no ROS sourced
+    AND on a clean cache
+  - colcon build --packages-select riptide_dynamics green with it editable;
+    sim.launch.py runs (still on ~/.local Pinocchio for both dynamics and control — no
+    mixed state)
+  - The canary loads the Conan-built .so into controller_manager without symbol/ODR
+    error
+
+RISKS / WATCH-OUTS
+  - One CMakeLists under two providers — a subtle target-name mismatch breaks one path
+    silently (guarded by the Step-9 CI matrix)
+  - Accidentally flipping the colcon default to Conan-Pinocchio here would create the
+    two-libpinocchio crash — the ordering guard forbids it until Step 8
+

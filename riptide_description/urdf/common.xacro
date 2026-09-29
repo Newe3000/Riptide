@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
   <!-- Reusable inertial macros so the description is dynamics-ready for MuJoCo
-       and for the whole-body controllers (M, C, g) from Phase 2 onward. -->
+       and for the whole-body controllers (M, C, g). -->
 
   <!-- Solid box inertia about its center of mass. -->
   <xacro:macro name="box_inertia" params="m x y z">

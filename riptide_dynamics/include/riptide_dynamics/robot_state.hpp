@@ -20,15 +20,15 @@ struct RobotState
   Eigen::VectorXd q;   ///< joint positions
   Eigen::VectorXd dq;  ///< joint velocities
 
-  // Floating base (world <- base). Identity/zero until the free joint exists
-  // (Phase 3); until then the base is world-fixed and these stay constant.
+  // Floating base (world <- base). Identity/zero while the base has no free
+  // joint (world-fixed).
   Eigen::Isometry3d base_pose{Eigen::Isometry3d::Identity()};
   Eigen::Matrix<double, 6, 1> base_twist{Eigen::Matrix<double, 6, 1>::Zero()};
 
   Eigen::Isometry3d ee_pose{Eigen::Isometry3d::Identity()};  ///< convenience
 
   /// Optional sensors keyed by logical name (e.g. "ee_ft", "dvl", "imu").
-  /// Lets new sensors reach control laws without an ABI change (R2).
+  /// Lets new sensors reach control laws without an ABI change.
   std::map<std::string, Eigen::VectorXd> extra;
 };
 

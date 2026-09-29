@@ -1,0 +1,54 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 2 of 10 -- Stand up Conan 2 tooling, a Jazzy-matched ABI profile, a private remote, and prove Eigen + Boost policy
+Effort: M    Depends on: step 01
+========================================================================================
+
+SUMMARY
+  Introduce Conan 2 alongside ament without editing any package, and nail the ABI
+  contract (compiler, libcxx, cxx11-abi, cppstd, Eigen, Boost) that keeps Conan binaries
+  link-compatible with the apt ros2_control binaries in one process.
+
+WHY THIS STEP
+  The single most load-bearing correctness risk is a profile that silently mismatches
+  the ROS toolchain; getting it wrong surfaces only as a runtime crash much later, so it
+  must be frozen from the actual box up front.
+
+ACTIONS
+  - Install Conan 2.x; commit conan/profiles/riptide-linux-release (host) + a matching
+    build profile (two-profile mode). Derive the ABI from the real box: gcc major from
+    `gcc -v`; confirm compiler.libcxx=libstdc++11 AND _GLIBCXX_USE_CXX11_ABI=1 by
+    readelf/nm on an apt ros-jazzy .so (24.04 expected yes, verified not assumed); set
+    compiler.cppstd to match ROS's gnu17-vs-17; build_type=Release; arch=x86_64; add
+    Eigen alignment/vectorization + NDEBUG consistency notes.
+  - Standardize generators CMakeToolchain + CMakeDeps and cmake_layout. Add
+    center2.conan.io (NOT the frozen center.conan.io) plus a private remote (interim
+    conan_server/filesystem, target Artifactory CE/Cloudsmith); prove upload+download
+    round-trip.
+  - Determine the exact system Eigen (dpkg -s libeigen3-dev) and pin that eigen/x.y.z; a
+    throwaway test_package (with VirtualRunEnv) compiles a matrix op and confirms
+    CMakeDeps emits the unchanged Eigen3::Eigen target.
+  - Decide and record the Boost policy: Conan pinocchio needs boost>=1.84 while apt ROS
+    ships 1.83; document that Boost version is locked in package_id (Step 4) and its
+    containment inside libpinocchio must be verified (Step 8), and that no first-party
+    core may expose boost.
+  - Commit .gitignore for build dirs / CMakeUserPresets.json / conan output folders.
+
+DELIVERABLES
+  - Committed profile pair reproducing the Jazzy ABI
+  - Working private remote with proven upload/download
+  - Pinned eigen resolvable via Conan with an unchanged target name
+  - A written Boost coexistence policy
+
+ACCEPTANCE (this step is done when)
+  - `conan profile show` prints the intended ABI including cppstd and libcxx
+  - `conan install --requires=eigen/x.y.z` writes CMakeDeps configs and the test_package
+    compiles + runs
+  - readelf confirms _GLIBCXX_USE_CXX11_ABI on a ros-jazzy .so matches the profile
+  - colcon build is unchanged and green
+
+RISKS / WATCH-OUTS
+  - Profile ABI drift vs the ROS base silently breaks the later single-process mixed
+    link — freeze from the actual box
+  - Conan Eigen != apt Eigen causes header ODR/alignment skew — pin the exact version,
+    never a range or 'latest'
+

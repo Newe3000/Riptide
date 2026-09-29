@@ -28,7 +28,7 @@ namespace riptide_mujoco
 /// ros2_control SystemInterface that embeds MuJoCo and runs the physics step in
 /// the controller_manager update loop.
 ///
-/// Actuated joints are matched to MuJoCo joints/actuators by name (R2). The
+/// Actuated joints are matched to MuJoCo joints/actuators by name. The
 /// floating base is exposed as a ros2_control "sensor" (pose + twist state
 /// interfaces) so controllers can read it. An internal node subscribes to
 /// disturbance-wrench commands (applied to mjData.xfrc_applied), echoes them as
@@ -79,7 +79,7 @@ private:
   std::vector<double> eff_cmd_;
   std::vector<double> home_;
 
-  // Hull thrusters exposed via a ros2_control <gpio> (Phase 4b). Each command
+  // Hull thrusters exposed via a ros2_control <gpio>. Each command
   // interface is mapped by name to a MuJoCo force actuator; the state interface
   // reports the applied force. Parallel arrays.
   std::vector<std::string> thr_gpio_;    ///< owning gpio name (interface prefix)

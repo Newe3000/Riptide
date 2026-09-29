@@ -4,17 +4,17 @@
     The ros2_control "seam": the single boundary between the simulator/hardware
     and the whole control stack.
 
-    Every actuated joint declares an `effort` command interface (R1: the
+    Every actuated joint declares an `effort` command interface (the
     controller publishes joint torques) and position/velocity/effort state
     interfaces (the sensors the controller reads back).
 
-    Adding an actuator or sensor is a *declarative* change here (R2): add a
+    Adding an actuator or sensor is a *declarative* change here: add a
     <joint>/<sensor> block, and the hardware plugin exposes it automatically.
     Controllers address these by logical name, never by index.
 
     The <hardware> plugin is swappable WITHOUT touching the interface list:
-      * Phase 1  -> mock_components/GenericSystem (no physics, mirrors commands)
-      * Phase 2+ -> riptide_mujoco/MujocoSystem  (real MuJoCo dynamics)
+      * mock_components/GenericSystem (no physics, mirrors commands)
+      * riptide_mujoco/MujocoSystem  (real MuJoCo dynamics)
 
     The Franka gripper (fer_finger_joint1 + its mimic) is intentionally left out
     of the control group — EE stabilization is a 7-DoF arm problem here.
@@ -36,7 +36,7 @@
     </joint>
   </xacro:macro>
 
-  <!-- Hull thrusters (Phase 4b), exposed as a ros2_control gpio. Each thruster
+  <!-- Hull thrusters, exposed as a ros2_control gpio. Each thruster
        is a force-commanded actuator mapped by name to a MuJoCo <motor>; the
        matching state interface reports the applied force. Adding/removing a
        thruster is a declarative change here + one entry in generate_scene.py. -->
@@ -45,7 +45,7 @@
     <state_interface name="${tname}"/>
   </xacro:macro>
 
-  <!-- Floating-base pose + twist, exposed as a ros2_control sensor (Phase 3). -->
+  <!-- Floating-base pose + twist, exposed as a ros2_control sensor. -->
   <xacro:macro name="riptide_base_sensor" params="name">
     <sensor name="${name}">
       <state_interface name="position.x"/>
@@ -94,7 +94,7 @@
       <!-- Floating-base sensor (MuJoCo populates it; mock reports zeros). -->
       <xacro:riptide_base_sensor name="auv_base"/>
 
-      <!-- Hull thruster bank (Phase 4b base dynamic positioning). Names match
+      <!-- Hull thruster bank (base dynamic positioning). Names match
            the MuJoCo thruster actuators in generate_scene.py. -->
       <gpio name="thrusters">
         <xacro:riptide_thruster tname="thr_surge"/>

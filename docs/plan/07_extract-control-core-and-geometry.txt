@@ -1,0 +1,51 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 7 of 10 -- Extract riptide_geometry (eigen-only leaf) and riptide_control_core as Conan packages
+Effort: L    Depends on: step 05, step 06
+========================================================================================
+
+SUMMARY
+  Carve the eigen-only geometry helpers into a frictionless leaf package and move the
+  de-ROS'd control-law math into riptide_control_core (no pluginlib, no rclcpp, no
+  msgs), with unit tests that run entirely outside ROS.
+
+WHY THIS STEP
+  This is where the graph becomes genuinely multi-package and externally reusable.
+  Geometry is foregrounded — the lightest, most adoptable package and the primary wider-
+  use proof — and control_core depends on it, so it is extracted first.
+
+ACTIONS
+  - Create riptide_geometry (header-mostly, requires eigen ONLY): lift the allocation-
+    matrix build + regularized pseudo-inverse (A^T (A A^T + reg)^-1) from
+    base_thruster_controller.cpp and the SO(3)/SE(3) error helpers from
+    operational_space.hpp; add conanfile.py + test_package.
+  - Create riptide_control_core: move operational_space.hpp, the de-rclcpp'd
+    control_law_interface.hpp, and task_space_{impedance,lqr,mpc,template}.{hpp,cpp}
+    WITHOUT PLUGINLIB_EXPORT_CLASS; add the EndEffectorTarget/ControlDebug POD mirrors.
+    conanfile.py requires riptide_dynamics + riptide_geometry + eigen and NOT
+    rclcpp/pluginlib/riptide_msgs.
+  - Port test/test_control_laws.cpp into control_core's test_package so laws are tested
+    with zero ROS; assert against the Step-1 golden fixture.
+  - Register both as editables; run the grep fitness check against both packages'
+    include/src trees.
+  - Leave riptide_control's base_thruster_controller with its inline allocation copy for
+    now; it switches to consuming riptide_geometry in Step 8 to avoid touching the ROS
+    seam prematurely.
+
+DELIVERABLES
+  - riptide_geometry: an eigen-only Conan leaf with a test_package
+  - riptide_control_core: an rclcpp/pluginlib/msgs-free Conan package, unit-tested
+    outside ROS
+  - Grep fitness passing for both
+
+ACCEPTANCE (this step is done when)
+  - conan create riptide_geometry + riptide_control_core + their test_packages pass in a
+    shell with NO ROS sourced and on a clean cache
+  - control_core's ported gtest reproduces the golden fixture
+  - `grep -rL` confirms no rclcpp/pluginlib/riptide_msgs includes under either package
+
+RISKS / WATCH-OUTS
+  - Premature/over-split packages — mitigated because geometry has three real consumers
+    (control_core, base-thruster path, example) and control_core is the load-bearing
+    reuse target
+  - A hidden ROS include surviving the Step-5 refactor — the grep gate blocks packaging
+

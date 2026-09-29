@@ -1,0 +1,55 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 9 of 10 -- CI, binary hosting, semver + package_id policy, and committed lockfiles
+Effort: M    Depends on: step 03, step 04, step 06, step 07, step 08
+========================================================================================
+
+SUMMARY
+  Make the multi-package graph reproducible and publishable with a bottom-up
+  build/test/upload pipeline, a colcon integration guard consuming Conan binaries, the
+  grep fitness lint, and committed conan.lock files.
+
+WHY THIS STEP
+  Without CI and lockfiles the deep Pinocchio graph and the ABI-sensitive package_ids
+  drift between machines; the colcon consumer must be proven to stay green against
+  published binaries.
+
+ACTIONS
+  - Add .github/workflows (none exist today). Job A: conan create each recipe bottom-up
+    (mujoco, pinocchio pin, riptide_dynamics, riptide_geometry, riptide_control_core) on
+    the Jazzy profile with test_packages; produce conan.lock; conan upload --confirm to
+    the private remote on git tag. Use fetch-depth:0 / fetch --tags so set_version from
+    git describe does not break in shallow clones.
+  - Job B: a Jazzy-container job that conan install --build=missing from the pinned
+    lock, then colcon build with the Step-8 mechanism + a headless sim smoke launch
+    consuming those packages.
+  - Job C: the L1 grep fitness lint.
+  - Versioning: SemVer per package; git tag -> set_version; first-party requires pin
+    exact versions or tight ranges; tool_requires (cmake/ninja) may use ranges.
+    package_id policy: geometry (header-only) ignores compiler settings;
+    dynamics/control_core/pinocchio key on settings+deps with eigen AND boost versions
+    encoded.
+  - Use Conan 2 idioms: package revisions + remote promotion between a testing and a
+    stable remote (NOT Conan-1 user/channel like riptide/testing). Commit conan.lock so
+    Pinocchio's deep graph resolves identically; cache the Conan home between runs; gate
+    any full from-source rebuilds to tags; scope remote credentials as CI secrets.
+
+DELIVERABLES
+  - Green CI building/testing/publishing versioned binaries for all first-party + the
+    mujoco recipe
+  - A colcon integration guard (Job B) launching the sim headless from pinned binaries
+  - The grep fitness lint in CI
+  - Committed conan.lock files
+
+ACCEPTANCE (this step is done when)
+  - PR CI runs all jobs green
+  - A tag publishes packages visible via `conan list '*' -r riptide-private`
+  - A clean-cache runner reproduces the same package revisions from the lockfile
+  - Job B launches the sim headless and passes
+
+RISKS / WATCH-OUTS
+  - git describe silently empty in shallow CI clones — fetch-depth:0/tags required
+  - Lockfile drift if a require is bumped without regenerating the lock — Job B on the
+    committed lock guards it
+  - Version-range drift breaking the colcon consumer — the pinned lock used by Job B is
+    the guard
+

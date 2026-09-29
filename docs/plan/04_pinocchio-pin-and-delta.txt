@@ -1,0 +1,57 @@
+RIPTIDE -> MULTI-CONAN-PACKAGE MIGRATION
+Step 4 of 10 -- Pin conan-center pinocchio/3.8.0, evaluate the recipe, author only the delta (the honest, de-scoped hard problem)
+Effort: M    Depends on: step 02
+========================================================================================
+
+SUMMARY
+  Consume the existing conan-center pinocchio recipe with collision off (no coal), Eigen
+  pinned to the system version, and Boost version-locked in package_id; fork the recipe
+  locally only if a required option or version is actually missing.
+
+WHY THIS STEP
+  VERIFIED: pinocchio/3.8.0, urdfdom/4.0.0, boost and eigen are all on conan-center, and
+  with_collision_support defaults False — so the old 'author pinocchio+coal+urdfdom from
+  scratch' pole collapses to a pin-and-evaluate. The only genuine residual is Boost
+  coexistence, addressed here and in Step 8.
+
+ACTIONS
+  - Spike the conan-center pinocchio/3.8.0 recipe against Riptide's needs: buildModel
+    from the fer URDF, crba/computeAllTerms, getFrameJacobian, framesForwardKinematics.
+    Confirm with_collision_support=False (no coal), Python interface off, eigen>=3.4.0
+    transitive_headers, urdfdom/4.0.0 transitive_headers, boost>=1.84
+    transitive_headers.
+  - Pin pinocchio/3.8.0 with with_collision_support=False; force its eigen to the exact
+    Step-2 system version via the profile/lockfile; lock the resolved boost version into
+    the graph and record it.
+  - Verify the from-source ~/.local pinocchio API matches 3.8.0 for the calls Riptide
+    makes (stable Pinocchio 3 API); note any signature deltas.
+  - If (and only if) a needed option/version is missing, add a local-recipes-index fork
+    of the recipe with the minimal change — NOT an author-from-scratch. Do NOT build a
+    non-relocatable ~/.local bridge recipe (it ships absolute RPATHs/config paths and is
+    portable to exactly the machine that already has PINOCCHIO_ROOT — zero value).
+  - Write a pinocchio test_package: buildModel from the vendored fer URDF, compute M +
+    an EE Jacobian, under VirtualRunEnv. conan create + upload.
+  - Begin the Boost containment check: readelf/nm the resulting libpinocchio.so to
+    confirm boost symbols are not exported into the interface Riptide's controllers will
+    resolve (feeds Step 8).
+
+DELIVERABLES
+  - pinocchio/3.8.0 pinned and resolvable from the private remote with eigen+boost
+    locked in the graph
+  - A test_package computing M + Jacobian for the fer model
+  - A recorded evaluation: which recipe options fit, what (if any) delta was forked, and
+    the Boost containment finding
+
+ACCEPTANCE (this step is done when)
+  - conan create + test_package green on a machine with NO PINOCCHIO_ROOT and NO
+    ~/.local/pinocchio (true clean-machine portability, not merely 'no ROS sourced')
+  - `conan graph info` shows eigen resolved to the exact Step-2 version and a single
+    boost version
+  - A clean-cache resolve reproduces the same pinocchio package revision
+
+RISKS / WATCH-OUTS
+  - Boost 1.84+ (Conan) vs 1.83 (apt ROS) coexisting in one controller_manager process
+    is the real residual ODR risk — contained by the symbol-visibility check here and
+    the mixed-process canary in Step 8
+  - 3.8.0 vs the from-source version API drift for an exotic call — caught by the spike
+

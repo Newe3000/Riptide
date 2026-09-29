@@ -1,28 +1,26 @@
 # controller_manager configuration for the Riptide sim.
 #
-# Phase 1 runs only the joint_state_broadcaster to prove the state interfaces.
-# The EE-stabilization controller (riptide_control) is added in Phase 2/4 as an
-# additional entry here — no launch changes required, just spawn it.
+# Controllers are added as entries here and spawned individually; enabling an
+# additional controller requires no launch changes, only spawning it.
 
 controller_manager:
   ros__parameters:
     update_rate: 250  # Hz — 4 ms control budget vs the 2 ms MuJoCo timestep, so
-                      # write() runs 2 physics substeps/cycle. Gives real-time
-                      # headroom (no FIFO priority here) => no overrun warnings.
-                      # Physics fidelity is unchanged (still 2 ms substeps).
+                      # write() runs 2 physics substeps/cycle. Leaves real-time
+                      # headroom without FIFO priority. Physics runs 2 ms substeps.
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    # Baseline torque controller: holds the arm against gravity (Phase 2 seed).
+    # Baseline torque controller: holds the arm against gravity.
     joint_pd_controller:
       type: riptide_control/JointPdController
 
-    # Phase 4: task-space EE stabilization (Pinocchio + impedance).
+    # Task-space EE stabilization (Pinocchio + impedance).
     ee_stabilization_controller:
       type: riptide_control/EeStabilizationController
 
-    # Phase 4b: base dynamic positioning via hull thrusters.
+    # Base dynamic positioning via hull thrusters.
     base_thruster_controller:
       type: riptide_control/BaseThrusterController
 
@@ -76,8 +74,8 @@ ee_stabilization_controller:
     capture_target_on_activate: true
     target_position: [0.45, 0.0, 1.9]
     target_orientation: [0.0, 0.0, 0.0, 1.0]   # xyzw (identity); used when capture is false
-    # Cartesian impedance gains. Orientation is now controlled as stiffly as
-    # position (was ~4x softer, so it visibly drifted under disturbance).
+    # Cartesian impedance gains. Orientation is held as stiffly as position to
+    # resist drift under disturbance.
     impedance.kp_pos: [800.0, 800.0, 800.0]
     impedance.kp_ori: [300.0, 300.0, 300.0]
     impedance.kd_pos: [80.0, 80.0, 80.0]

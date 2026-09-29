@@ -156,7 +156,7 @@ controller_interface::CallbackReturn JointPdController::on_activate(
 controller_interface::CallbackReturn JointPdController::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // Command zero torque so the arm is not left with a stale hold command.
+  // Command zero torque so the hardware holds no residual effort after deactivation.
   for (std::size_t i = 0; i < joints_.size(); ++i)
   {
     (void)command_interfaces_[cmd_effort_idx_[i]].set_value(0.0);

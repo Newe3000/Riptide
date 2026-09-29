@@ -77,7 +77,7 @@ private:
   // Constant mount offset: base link (auv_base_link) -> arm root (link0).
   Eigen::Vector3d mount_t_{Eigen::Vector3d::Zero()};
 
-  // Hydrodynamics (per-link drag; see closeModelPlantMismatch in the notes).
+  // Hydrodynamics (per-link drag).
   bool hydro_{false};
   double rho_{1000.0};   ///< fluid density [kg/m^3]
   double mu_{0.0009};    ///< dynamic viscosity [Pa.s]

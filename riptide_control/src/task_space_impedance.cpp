@@ -64,8 +64,8 @@ Eigen::VectorXd TaskSpaceImpedance::compute(
   // is realized through the operational-space inertia, so the EE presents a
   // decoupled second-order impedance (x_ddot + Kd x_dot + Kp x_err = 0) rather
   // than a pose-dependent one. Base motion is rejected through x_err; only the
-  // arm-induced EE velocity (J dq) is damped (a base-velocity feedforward was
-  // tried and reverted -- it excites the light free base via arm reaction).
+  // arm-induced EE velocity (J dq) is damped, since damping the base velocity too
+  // would excite the light free base via arm reaction.
   const Eigen::Matrix<double, 6, 1> x_err =
     task_pose_error(model_->framePose("ee"), target.pose);
   const Eigen::Matrix<double, 6, 1> v_ee = model_->jacobian("ee") * state.dq;

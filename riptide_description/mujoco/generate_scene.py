@@ -7,16 +7,16 @@ Transforms applied:
   * replace the position (<general>) actuators with 7 torque <motor> actuators
     named fer_joint{i} (Riptide commands joint torques via the effort interface);
   * nest the arm (link0 subtree) under the cube "auv_base" body;
-  * Phase 3: make auv_base a FLOATING base (<freejoint/>) in water --
+  * make auv_base a FLOATING base (<freejoint/>) in water --
       - global fluid medium (density/viscosity) + the per-geom ellipsoid fluid
         model give drag + added mass (velocity-dependent), so motion is damped
         like it is underwater;
       - NEUTRAL BUOYANCY is modelled as gravity = 0: the vehicle neither sinks
         nor floats, external disturbances (current/impulses) are the forces of
-        interest. (MuJoCo's fluid model does not add Archimedes buoyancy, so a
+        interest. (MuJoCo's fluid model does not add Archimedes buoyancy; a
         higher-fidelity Fossen-style buoyancy+gravity model is a later upgrade.)
   * add a seabed floor + an "ee" site at the hand TCP;
-  * drop the keyframe (its ctrl dimension no longer matches the new actuators).
+  * drop the keyframe (its ctrl dimension does not match the new actuators).
 
 Run:  python3 generate_scene.py   (regenerates riptide.xml in place)
 Provenance: vendor/panda.xml, vendor/LICENSE (mujoco_menagerie, Apache-2.0).
@@ -52,7 +52,7 @@ START_Z = 1.2              # spawn height above the seabed [m]
 # Solid-box inertia about the CoM (kept simple/diagonal).
 BOX_I = BASE_MASS * (CUBE_SIZE**2 + CUBE_SIZE**2) / 12.0
 
-# --- Hull thrusters (Phase 4b: base dynamic positioning) ---------------------
+# --- Hull thrusters (base dynamic positioning) -------------------------------
 # Each thruster is a body-fixed force actuator applied at a site. The layout is
 # FULLY ACTUATED -- it spans all 6 rigid-body DOFs:
 #   * 1 surge thruster along body +x  -> forward/backward (Fx),
@@ -123,7 +123,7 @@ def main():
             "forcerange": f"-{THRUST_LIMIT} {THRUST_LIMIT}",
         })
 
-    # --- drop keyframe (ctrl dimension changed) -----------------------------
+    # --- drop keyframe (ctrl dimension differs from new actuators) ----------
     for kf in root.findall("keyframe"):
         root.remove(kf)
 
