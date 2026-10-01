@@ -39,6 +39,12 @@ class RiptideControlCoreConan(ConanFile):
     def layout(self):
         cmake_layout(self)
 
+    def package_id(self):
+        # ABI-sensitive core: key the binary on the full versions of its deps
+        # (riptide_dynamics, riptide_geometry, Eigen -- and Boost transitively through
+        # dynamics->Pinocchio) plus the compiler/ABI settings. See conan/README.md.
+        self.info.requires.full_version_mode()
+
     def generate(self):
         CMakeDeps(self).generate()
         CMakeToolchain(self).generate()

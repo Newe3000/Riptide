@@ -1,0 +1,25 @@
+{
+    "version": "0.5",
+    "requires": [
+        "zlib/1.3.2#1cb806da49011867778ffb6ac7190fcb%1777558780.503",
+        "urdfdom_headers/1.1.1#6a15060ee987ce17c6d7412cc5263923%1709117127.529",
+        "urdfdom/4.0.0#e68d7aed7dbdd349a77e7430fe7f1f8c%1708884034.628",
+        "tinyxml2/10.0.0#832c7f8038cef53f6427577d6e66a7a8%1704034733.705",
+        "riptide_geometry/0.0.1#0763c2c5fd8080cdcf856592c4ec1912%1790846249.4733393",
+        "riptide_dynamics/0.0.1#2afa90e1e836dbea42c15755ce0ef193%1790862483.7358918",
+        "riptide_control_core/0.0.1#e1a4f706d1d8adad9a3bae866830b725%1790862531.1942022",
+        "pinocchio/3.8.0#e5f14487f5884967f415745553c65faa%1766512385.314",
+        "mujoco/3.10.0#e1e3f3734337d6f72294ae6a4503bf56%1790762750.575058",
+        "libbacktrace/cci.20210118#a7691bfccd8caaf66309df196790a5a1%1722218217.276",
+        "eigen/3.4.0#a95b834c9459d8b8cb6dba6426ca0409%1790761147.3540978",
+        "console_bridge/1.0.2#04aabf931d6e91383f716760fa9a177f%1748177974.73",
+        "bzip2/1.0.8#c470882369c2d95c5c77e970c0c7e321%1762886692.465",
+        "boost/1.89.0#926d18a33daa92bbe4e8b7d2552de4ab%1788958838.894"
+    ],
+    "build_requires": [
+        "cmake/4.4.3#8b46ce9dbf1937af1c05f19579c1f105%1789658722.203",
+        "b2/5.5.3#043a75bcbb090e3f81f7ac849850d0ca%1784261134.143"
+    ],
+    "python_requires": [],
+    "config_requires": []
+}

@@ -40,6 +40,14 @@ fi
 
 # 2. Refresh the Conan dependency configs (best-effort; skipped if conan absent).
 _riptide_rosdeps="$_riptide_ws/conan/ros_deps"
+# Reproducible resolution: set RIPTIDE_LOCKFILE=conan/riptide.lock (CI Job B does) to
+# pin the whole graph to the committed lock. Unset for day-to-day dev so local edits
+# to the cores are not fought by stale pins.
+_riptide_lockarg=""
+if [ -n "${RIPTIDE_LOCKFILE:-}" ] && [ -f "$_riptide_ws/${RIPTIDE_LOCKFILE#$_riptide_ws/}" ]; then
+  _riptide_lockarg="--lockfile=${RIPTIDE_LOCKFILE}"
+  echo "riptide: using lockfile ${RIPTIDE_LOCKFILE}"
+fi
 if command -v conan >/dev/null 2>&1; then
   echo "riptide: conan install -> conan/ros_deps (CMakeDeps only)"
   # List riptide_dynamics + riptide_geometry as DIRECT requires too: riptide_control
@@ -53,6 +61,7 @@ if command -v conan >/dev/null 2>&1; then
       -g CMakeDeps -o "pinocchio/*:with_collision_support=False" \
       -pr:h conan/profiles/riptide-linux-release \
       -pr:b conan/profiles/riptide-linux-build \
+      $_riptide_lockarg \
       --build=missing --output-folder=conan/ros_deps >/dev/null ) \
     || echo "riptide: conan install failed — using existing conan/ros_deps if present" >&2
   # urdfdom must come from ONE provider shared with the ROS stack: the system/ROS

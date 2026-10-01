@@ -40,6 +40,13 @@ class RiptideDynamicsConan(ConanFile):
     def layout(self):
         cmake_layout(self)
 
+    def package_id(self):
+        # ABI-sensitive core: a different Eigen or Pinocchio (and, through Pinocchio,
+        # a different Boost) yields an incompatible binary, so encode the full
+        # dependency versions into the package_id (in addition to the compiler/ABI
+        # settings). See conan/README.md "Versioning & package_id policy".
+        self.info.requires.full_version_mode()
+
     def generate(self):
         CMakeDeps(self).generate()
         tc = CMakeToolchain(self)

@@ -68,12 +68,58 @@ conan profile show -pr:h conan/profiles/riptide-linux-release   # prints the fro
     Both live in one process (Conan `libpinocchio` + apt `tf2`/others).
   - **Lock** the Boost version in `pinocchio`'s `package_id` (Step 04): a Boost bump
     forces a pinocchio rebuild, never a silent ABI change.
-  - **Contain** Boost inside `libpinocchio.so`: Boost symbols must not cross the
-    `.so` boundary the ROS controllers resolve — verified by `nm` in Step 08
-    (prefer static/hidden-visibility Boost).
+  - **Contain** Boost inside `libpinocchio.so`: confirmed in Step 08 — `pinocchio`
+    links Boost **statically** (no `libboost_*.so` in `libpinocchio_*.so`'s NEEDED),
+    so no Boost symbol crosses the `.so` boundary the ROS controllers resolve and the
+    live `controller_manager` shows no two-Boost ODR symptom.
   - **No first-party core** (`riptide_dynamics`, `riptide_control_core`,
     `riptide_geometry`) may expose Boost in its public API. Boost stays a private
     transitive of pinocchio only.
+
+## CI, versioning & lockfiles (Step 09)
+
+**CI** — `.github/workflows/ci.yml`, three jobs:
+- **layer-lint** — `tools/check_layer_boundaries.sh` (no ROS tokens in the L1 cores).
+- **conan-build-publish** — on the `ros:jazzy-ros-base` image (noble/gcc13 = the ABI
+  profile), `conan create` bottom-up (`mujoco` → `riptide_geometry` →
+  `riptide_dynamics` → `riptide_control_core`; `pinocchio` is pulled+built as a
+  dependency with `--build=missing`), test_packages run inline, pinned to the lock.
+  On a `v*` tag it `conan upload`s to `riptide-private`. `fetch-depth: 0` so
+  `set_version`'s `git describe` works; `-c tools.build:jobs=2` so Pinocchio/Boost
+  don't OOM.
+- **colcon-integration** — same image; `RIPTIDE_LOCKFILE=conan/riptide.lock ./build.sh`
+  (conan install from the lock + colcon build via the Step-8 seam) then
+  `tools/smoke_sim.sh` (headless MuJoCo+EE smoke, asserts the mixed Conan/ament process
+  activates and holds a bounded EE error).
+
+**Versioning** — SemVer per package; `set_version` reads the nearest `git` tag (`vX.Y.Z`),
+falling back to `0.0.1`. First-party `requires` pin **exact** versions
+(`riptide_control_core` → `riptide_dynamics/0.0.1`, `riptide_geometry/0.0.1`;
+`riptide_dynamics` → `pinocchio/3.8.0`, `eigen/3.4.0`); `tool_requires` (cmake/b2 via
+the deps) may float.
+
+**`package_id` policy** —
+- `riptide_geometry` (header-only): `info.clear()` — one id for all configs.
+- `riptide_dynamics`, `riptide_control_core`: settings (compiler/ABI) **plus**
+  `requires.full_version_mode()`, so a different Eigen or Pinocchio — and, through
+  Pinocchio, a different Boost — yields a different binary.
+- `mujoco`: keyed on `os` + `arch` + `version` only (prebuilt SDK; compiler/build_type
+  deleted).
+
+**Lockfile** — `conan/riptide.lock` pins the whole graph (cores + `mujoco` + the deep
+`pinocchio`/`boost`/`eigen`/`urdfdom` chain) to exact **recipe revisions**, so a
+clean-cache runner resolves identically. Regenerate after any `requires` bump:
+
+```bash
+conan lock create --requires=riptide_control_core/0.0.1 --requires=riptide_dynamics/0.0.1 \
+  --requires=riptide_geometry/0.0.1 --requires=mujoco/3.10.0 \
+  -pr:h conan/profiles/riptide-linux-release -pr:b conan/profiles/riptide-linux-build \
+  -o "pinocchio/*:with_collision_support=False" --lockfile-out=conan/riptide.lock
+```
+
+**Remote promotion** — Conan 2 package revisions, not Conan-1 `user/channel`. Tags push
+revisions to `riptide-private`; promote *testing → stable* by copying the blessed
+revision between remotes (`conan download`/`conan upload`), never by rebuilding.
 
 ## Recipes
 

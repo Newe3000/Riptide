@@ -1,0 +1,133 @@
+name: riptide-conan-ci
+
+# Reproducible, bottom-up build/test/publish of the multi-Conan-package graph plus a
+# colcon integration guard that consumes the Conan binaries. See
+# docs/plan/09_ci-hosting-versioning-lockfiles.txt and docs/adr/0002-colcon-conan-seam.md.
+#
+# Required repo secrets for publishing (Job A, tags only):
+#   CONAN_REMOTE_URL       e.g. https://conan.my-org.dev/artifactory/api/conan/riptide
+#   CONAN_REMOTE_USER
+#   CONAN_REMOTE_PASSWORD  (or an API token)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  CONAN_HOME: ${{ github.workspace }}/.conan2home
+  # Pinocchio + Boost are RAM-hungry from source; cap parallelism to avoid OOM kills
+  # (observed at -j8 on 15 GB; see conan/README.md).
+  CONAN_CPU_JOBS: "2"
+
+jobs:
+  # ---------------------------------------------------------------- Job C: L1 lint
+  layer-lint:
+    name: L1 boundary lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Grep fitness lint (no ROS tokens in Layer-1 cores)
+        run: bash tools/check_layer_boundaries.sh
+
+  # -------------------------------------------- Job A: conan create (+ publish on tag)
+  conan-build-publish:
+    name: conan create bottom-up + test_package
+    runs-on: ubuntu-latest
+    container:
+      image: ros:jazzy-ros-base            # Ubuntu 24.04 (noble), gcc 13 -> matches the ABI profile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                   # set_version uses `git describe`; shallow clones break it
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Toolchain + Conan
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential git python3-pip
+          pip3 install --break-system-packages "conan>=2.3,<3"
+          conan --version
+      - name: Cache the Conan home (keyed on the committed lock)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: conan-${{ runner.os }}-${{ hashFiles('conan/riptide.lock') }}
+          restore-keys: conan-${{ runner.os }}-
+      - name: conan create bottom-up (pinned to the lock, test_packages run inline)
+        run: |
+          PH="-pr:h conan/profiles/riptide-linux-release"
+          PB="-pr:b conan/profiles/riptide-linux-build"
+          OPTS="-o pinocchio/*:with_collision_support=False"
+          LOCK="--lockfile=conan/riptide.lock"
+          JOBS="-c tools.build:jobs=${CONAN_CPU_JOBS}"
+          set -eux
+          # L0 custom recipe + the from-source third-party (pinocchio is pulled+built
+          # as a dependency of riptide_dynamics with --build=missing).
+          conan create conan/recipes/mujoco --version=3.10.0 $PH $PB $LOCK $JOBS
+          conan create riptide_geometry       $PH $PB $OPTS $LOCK $JOBS --build=missing
+          conan create riptide_dynamics       $PH $PB $OPTS $LOCK $JOBS --build=missing
+          conan create riptide_control_core   $PH $PB $OPTS $LOCK $JOBS --build=missing
+      - name: Verify the lock still resolves these exact revisions
+        run: |
+          conan graph info --requires=riptide_control_core/0.0.1 --requires=mujoco/3.10.0 \
+            --lockfile=conan/riptide.lock \
+            -pr:h conan/profiles/riptide-linux-release -pr:b conan/profiles/riptide-linux-build \
+            -o "pinocchio/*:with_collision_support=False" --filter=ref > /dev/null
+      - name: Publish to the private remote (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CONAN_REMOTE_URL: ${{ secrets.CONAN_REMOTE_URL }}
+          CONAN_LOGIN_USERNAME: ${{ secrets.CONAN_REMOTE_USER }}
+          CONAN_PASSWORD: ${{ secrets.CONAN_REMOTE_PASSWORD }}
+        run: |
+          set -eux
+          conan remote add riptide-private "$CONAN_REMOTE_URL" --force
+          conan remote login riptide-private "$CONAN_LOGIN_USERNAME" -p "$CONAN_PASSWORD"
+          # Promotion model: tags publish to the private remote with their package
+          # revisions; promote testing->stable by copying revisions, never Conan-1
+          # user/channel. Upload only the first-party packages + the custom mujoco recipe.
+          for p in riptide_geometry riptide_dynamics riptide_control_core mujoco; do
+            conan upload "$p/*" -r riptide-private --confirm
+          done
+
+  # ----------------------------------------- Job B: colcon integration from the lock
+  colcon-integration:
+    name: colcon build + headless sim smoke (from pinned binaries)
+    runs-on: ubuntu-latest
+    needs: conan-build-publish
+    container:
+      image: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Toolchain + Conan + colcon
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential git python3-pip python3-colcon-common-extensions \
+            ros-jazzy-ros2-control ros-jazzy-ros2-controllers
+          pip3 install --break-system-packages "conan>=2.3,<3"
+      - name: Restore the Conan cache from Job A
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: conan-${{ runner.os }}-${{ hashFiles('conan/riptide.lock') }}
+          restore-keys: conan-${{ runner.os }}-
+      - name: colcon build via the Step-8 seam, pinned to the lock
+        shell: bash
+        run: |
+          set -eux
+          source /opt/ros/jazzy/setup.bash
+          export RIPTIDE_LOCKFILE=conan/riptide.lock      # build.sh pins the graph to the lock
+          ./build.sh                                       # conan install (from lock) + colcon build
+      - name: Headless sim smoke (Conan MuJoCo + Pinocchio mixed process)
+        shell: bash
+        run: |
+          set -eux
+          RIPTIDE_SMOKE_TIMEOUT=90 ./tools/smoke_sim.sh
