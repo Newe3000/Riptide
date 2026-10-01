@@ -16,6 +16,9 @@ deactivate_conan*.sh
 # generated CMakeDeps configs + VirtualRunEnv for the colcon<->Conan seam (ADR 0002);
 # regenerated on every build.sh run, machine-specific absolute cache paths inside.
 conan/ros_deps/
+# standalone example: conan install + cmake outputs
+examples/*/build/
+examples/*/CMakeUserPresets.json
 
 # python
 __pycache__/

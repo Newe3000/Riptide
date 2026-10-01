@@ -132,3 +132,48 @@ jobs:
         run: |
           set -ex
           RIPTIDE_SMOKE_TIMEOUT=90 ./tools/smoke_sim.sh
+
+  # ------------------------- Job D: zero-ROS consumer example (clean container)
+  example-clean-container:
+    name: standalone example (no ROS / no ~/.mujoco / no ~/.local)
+    runs-on: ubuntu-latest
+    needs: conan-build-publish
+    container:
+      image: ubuntu:24.04                   # NOT a ROS image, by design -- noble = gcc 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Toolchain + Conan (no ROS)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential cmake git python3-pip
+          pip3 install --break-system-packages "conan>=2.3,<3"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Restore the Conan cache (cores + pinocchio) from Job A
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: conan-${{ runner.os }}-${{ hashFiles('conan/riptide.lock') }}
+          restore-keys: conan-${{ runner.os }}-
+      - name: Prove there is no ROS / ~/.mujoco / ~/.local/pinocchio in this container
+        run: |
+          set -ex
+          test ! -d /opt/ros
+          test ! -d "$HOME/.mujoco"
+          test ! -d "$HOME/.local/pinocchio"
+      - name: conan install + cmake + ctest the standalone example
+        shell: bash
+        run: |
+          set -ex
+          cd examples/standalone_control_loop
+          conan install . \
+            -pr:h ../../conan/profiles/riptide-linux-release \
+            -pr:b ../../conan/profiles/riptide-linux-build \
+            -o "pinocchio/*:with_collision_support=False" \
+            --lockfile=../../conan/riptide.lock --build=missing
+          cmake --preset conan-release
+          cmake --build --preset conan-release
+          # Conan libs are relocatable -> put them on the loader path before running.
+          source build/Release/generators/conanrun.sh
+          ctest --preset conan-release --output-on-failure

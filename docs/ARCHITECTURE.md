@@ -328,19 +328,42 @@ The desired target enters asynchronously: `ee_target_gui` publishes
 
 ---
 
-## 7. External dependencies & the packaging seam
+## 7. External dependencies & the packaging seam (end state)
 
-How each non-ROS dependency is located today — the starting point for the
-Conan-packaging roadmap (`docs/plan/`).
+The Conan migration (`docs/plan/`) is **complete**: the reusable cores and the
+third-party native libraries are versioned Conan packages, and there are now **two
+consumption modes** for the same binaries.
+
+### Two consumption modes
+
+1. **Pure Conan (external, no ROS)** — `conan install` + plain CMake resolves
+   `riptide_geometry` / `riptide_dynamics` / `riptide_control_core` (and Pinocchio /
+   Eigen) from the remote and runs a control loop with no ROS, no `~/.mujoco`, no
+   `~/.local/pinocchio`. Proven by `examples/standalone_control_loop/` (CI-guarded in a
+   ROS-free container). Guide: [`docs/CONSUMING.md`](CONSUMING.md).
+2. **colcon + the Step-8 seam (the ROS sim)** — the two L3 colcon packages
+   (`riptide_control`, `riptide_mujoco`) discover the same Conan binaries by appending
+   the CMakeDeps output dir to `CMAKE_PREFIX_PATH` (never a global `conan_toolchain`,
+   which would clobber the ament prefix path). See
+   [`docs/adr/0002-colcon-conan-seam.md`](adr/0002-colcon-conan-seam.md).
+
+### How each non-ROS dependency is located now
 
 | Library | Used by | Found via |
 |---|---|---|
-| Eigen3 | riptide_dynamics, riptide_control | rosdep `eigen` + `eigen3_cmake_module` |
-| Pinocchio | riptide_dynamics, riptide_control | **source build**, CMake `PINOCCHIO_ROOT` (not rosdep) |
-| MuJoCo SDK | riptide_mujoco | CMake `MUJOCO_ROOT` (not rosdep) |
+| Eigen3 | cores, riptide_control | **Conan** `eigen/3.4.0` |
+| Pinocchio | riptide_dynamics (→ cores, riptide_control) | **Conan** `pinocchio/3.8.0` (collision off; Boost static-linked) |
+| MuJoCo | riptide_mujoco | **Conan** `mujoco/3.10.0` (repackaged prebuilt SDK) |
+| riptide_dynamics / _geometry / _control_core | riptide_control, external consumers | **Conan** first-party `/0.0.1` |
 | numpy, matplotlib | riptide_eval | rosdep `python3-numpy`, `python3-matplotlib` |
 | mujoco, glfw (pip) | mujoco_viewer.py | pip in the ROS Python |
 | tkinter | ee_target_gui.py | system `python3-tk` |
+
+No package uses `PINOCCHIO_ROOT` / `MUJOCO_ROOT` or a hand-set `INSTALL_RPATH` any more;
+runtime resolution is the Conan VirtualRunEnv (sourced by `build.sh` for the sim, or
+`conanrun.sh` for a standalone consumer). The final cutover decision (Conan-first cores;
+colcon consumes prebuilt binaries; ament shed from the L1 cores) is recorded in
+[`docs/adr/0003-final-cutover.md`](adr/0003-final-cutover.md).
 
 **ROS-agnostic core vs ROS glue** — the seam a Conan split runs along:
 
@@ -365,19 +388,20 @@ flowchart LR
     class DYN,OPS pure;
 ```
 
-- `riptide_dynamics` is **already** a standalone C++ library — no
-  rclcpp/ros2_control/pluginlib anywhere; only Eigen + Pinocchio. It is the
-  cleanest first Conan package.
-- The `TaskSpace*` control-law **math** (`operational_space.hpp` + the compute
-  cores) is ROS-agnostic in substance but currently compiled inside the
-  `riptide_control` ament library alongside the pluginlib controller wrappers;
-  extracting it is the second Conan candidate.
+- `riptide_dynamics` is the Conan **shared-library** core — no
+  rclcpp/ros2_control/pluginlib, only Eigen + Pinocchio.
+- The `TaskSpace*` control-law **math** was extracted out of `riptide_control` into the
+  Conan **`riptide_control_core`** package (Step 7); it reaches ROS only through the
+  `riptide::IControlLaw` / `ParamSource` / `Logger` seam, and the `riptide_control`
+  colcon package re-registers those classes as pluginlib plugins (Step 8).
 - Everything that includes `rclcpp`, `controller_interface`, `hardware_interface`,
-  or `rclpy` is ROS glue and stays in ROS packages that *consume* the Conan
-  libraries.
+  or `rclpy` is ROS glue in the colcon packages that *consume* the Conan libraries; the
+  POD↔msg crossing is confined to `riptide_control`'s adapters (`msg_conversions.hpp`,
+  `rclcpp_param_source.hpp`).
 
-The target Conan package graph, the downward-only layer invariant, and the
-verified boundary-violation baseline are frozen in
-[`docs/adr/0001-conan-package-taxonomy.md`](adr/0001-conan-package-taxonomy.md)
-and enforced by `tools/check_layer_boundaries.sh`. See `docs/plan/` for the
-step-by-step roadmap to a multi-Conan-package project.
+The Conan package graph, the downward-only layer invariant, and the boundary baseline are
+frozen in [`docs/adr/0001-conan-package-taxonomy.md`](adr/0001-conan-package-taxonomy.md)
+and enforced by `tools/check_layer_boundaries.sh` (green: all L1 cores clean). The seam
+mechanism, versioning/lockfile policy, and final cutover are in ADRs
+[0002](adr/0002-colcon-conan-seam.md) / [0003](adr/0003-final-cutover.md),
+`conan/README.md`, and `docs/CONSUMING.md`.
