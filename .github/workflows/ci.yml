@@ -122,12 +122,12 @@ jobs:
       - name: colcon build via the Step-8 seam, pinned to the lock
         shell: bash
         run: |
-          set -eux
-          source /opt/ros/jazzy/setup.bash
+          # No `set -u`: ROS 2 setup.bash references unset vars (AMENT_TRACE_SETUP_FILES).
+          set -ex
           export RIPTIDE_LOCKFILE=conan/riptide.lock      # build.sh pins the graph to the lock
-          ./build.sh                                       # conan install (from lock) + colcon build
+          ./build.sh                                       # sources ROS + conan install (lock) + colcon build
       - name: Headless sim smoke (Conan MuJoCo + Pinocchio mixed process)
         shell: bash
         run: |
-          set -eux
+          set -ex
           RIPTIDE_SMOKE_TIMEOUT=90 ./tools/smoke_sim.sh
