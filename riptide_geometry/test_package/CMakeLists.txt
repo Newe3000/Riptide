@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.15)
+project(test_geometry CXX)
+find_package(riptide_geometry REQUIRED)
+add_executable(test_geometry test_package.cpp)
+target_link_libraries(test_geometry riptide_geometry::riptide_geometry)

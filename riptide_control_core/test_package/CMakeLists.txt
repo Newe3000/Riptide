@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.15)
+project(test_control_core CXX)
+find_package(riptide_control_core REQUIRED)
+add_executable(test_control_core test_package.cpp)
+target_link_libraries(test_control_core riptide_control_core::riptide_control_core)

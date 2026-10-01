@@ -1,0 +1,62 @@
+"""Conan recipe for riptide_control_core -- the de-ROS'd control-law math
+(operational-space mapping + impedance/LQR/MPC/template laws). No rclcpp,
+pluginlib, rosidl, or riptide_msgs; the pluginlib registration + ROS wrappers
+stay in the riptide_control (L3) package."""
+import subprocess
+
+from conan import ConanFile
+from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+
+
+class RiptideControlCoreConan(ConanFile):
+    name = "riptide_control_core"
+    license = "Proprietary"
+    description = "Framework-neutral task-space control laws (impedance, LQR, MPC, template)."
+    package_type = "shared-library"
+    settings = "os", "arch", "compiler", "build_type"
+    exports_sources = "CMakeLists.txt", "src/*", "include/*"
+
+    def set_version(self):
+        self.version = "0.0.1"
+        try:
+            out = subprocess.run(
+                ["git", "-C", self.recipe_folder, "describe", "--tags", "--abbrev=0"],
+                capture_output=True, text=True, timeout=5)
+            tag = out.stdout.strip().lstrip("v")
+            if tag and tag[0].isdigit():
+                self.version = tag
+        except Exception:
+            pass
+
+    def requirements(self):
+        self.requires("riptide_dynamics/0.0.1", transitive_headers=True)
+        self.requires("riptide_geometry/0.0.1", transitive_headers=True)
+        self.requires("eigen/3.4.0", transitive_headers=True)
+
+    def configure(self):
+        self.options["pinocchio/*"].with_collision_support = False
+
+    def layout(self):
+        cmake_layout(self)
+
+    def generate(self):
+        CMakeDeps(self).generate()
+        CMakeToolchain(self).generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        CMake(self).install()
+
+    def package_info(self):
+        self.cpp_info.libs = ["riptide_control_core"]
+        self.cpp_info.set_property("cmake_file_name", "riptide_control_core")
+        self.cpp_info.set_property("cmake_target_name", "riptide_control_core::riptide_control_core")
+        self.cpp_info.requires = [
+            "riptide_dynamics::riptide_dynamics",
+            "riptide_geometry::riptide_geometry",
+            "eigen::eigen",
+        ]

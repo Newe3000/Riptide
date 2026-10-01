@@ -18,8 +18,10 @@ cd "$ROOT"
 
 FORBIDDEN='rclcpp|rclpy|pluginlib|PLUGINLIB_EXPORT_CLASS|controller_interface|hardware_interface|rosidl|riptide_msgs'
 
-# Target that MUST already be clean.
+# Targets that MUST already be clean: the extracted L1 Conan packages.
 DYNAMICS=(riptide_dynamics/include riptide_dynamics/src)
+GEOMETRY=(riptide_geometry/include)
+CONTROL_CORE_PKG=(riptide_control_core/include riptide_control_core/src)
 
 # Target that becomes riptide_control_core + riptide_geometry (Step 7); still
 # inside riptide_control today.
@@ -48,18 +50,24 @@ leaks() {
 
 echo "=== Layer-1 boundary audit ==="
 dyn="$(leaks "${DYNAMICS[@]}")"
+geom="$(leaks "${GEOMETRY[@]}")"
+corepkg="$(leaks "${CONTROL_CORE_PKG[@]}")"
 core="$(leaks "${CONTROL_CORE[@]}")"
 
 rc=0
-echo
-echo "[L1: riptide_dynamics]  (must be CLEAN)"
-if [ -z "$dyn" ]; then echo "  CLEAN"; else echo "$dyn" | sed 's/^/  LEAK  /'; rc=2; fi
+report_clean() {  # $1=label  $2=leaks -> fail (rc=2) if any
+  echo; echo "[L1: $1]  (must be CLEAN)"
+  if [ -z "$2" ]; then echo "  CLEAN"; else echo "$2" | sed 's/^/  LEAK  /'; rc=2; fi
+}
+report_clean "riptide_dynamics" "$dyn"
+report_clean "riptide_geometry" "$geom"
+report_clean "riptide_control_core" "$corepkg"
 
 echo
-echo "[L1: control-law core -> riptide_control_core/geometry]  (leaks expected until Step 5/7)"
-if [ -z "$core" ]; then echo "  CLEAN"; else echo "$core" | sed 's/^/  leak  /'; [ $rc -eq 0 ] && rc=1; fi
+echo "[riptide_control's in-tree control-law copies]  (pluginlib leaks expected until Step 8 cutover)"
+if [ -z "$core" ]; then echo "  CLEAN"; else echo "$core" | sed 's/^/  leak  /'; fi
 
 echo
-nfiles=$(printf '%s\n' "$core" | grep -c . )
-echo "RESULT: dynamics=$([ -z "$dyn" ] && echo clean || echo LEAKING); control-core leaking files=$nfiles"
+echo "RESULT: extracted L1 packages $([ -z "$dyn$geom$corepkg" ] && echo CLEAN || echo LEAKING); " \
+     "riptide_control in-tree copies leaking=$(printf '%s\n' "$core" | grep -c .)"
 exit $rc
