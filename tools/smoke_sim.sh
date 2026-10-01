@@ -33,6 +33,11 @@ source "/opt/ros/${DISTRO}/setup.bash"      2>/dev/null || { echo "smoke: no ROS
 source "${WS}/install/setup.bash"           2>/dev/null || { echo "smoke: workspace not built"; exit 1; }
 source "${WS}/conan/ros_deps/conanrun.sh"   2>/dev/null || { echo "smoke: conan runtime env missing (run build.sh)"; exit 1; }
 
+# Single-host smoke: scope DDS discovery to localhost (reliable inside CI containers,
+# avoids subnet multicast). Must be set BEFORE the launch so both the controller_manager
+# and the ros2 CLI below share it. Honour any value the caller already set.
+export ROS_AUTOMATIC_DISCOVERY_RANGE="${ROS_AUTOMATIC_DISCOVERY_RANGE:-LOCALHOST}"
+
 echo "smoke: launching headless MuJoCo + EE-impedance + steady_current (timeout ${TIMEOUT}s)"
 ros2 launch riptide_bringup sim.launch.py \
   use_mock_hardware:=false controller:=ee control_law:=impedance base_control:=true \
@@ -57,10 +62,21 @@ fi
 echo "smoke: hardware + ee_stabilization_controller activated"
 
 # --- assert ControlDebug publishes a finite, bounded EE pose error ---
-err="$(timeout 10 ros2 topic echo /riptide/control_debug --field ee_pose_error --once 2>/dev/null \
-        | grep -oE "array\('d', \[[^]]*\]")"
+# DDS discovery between the launch process and this ros2 CLI can be slow in a CI
+# container, so retry with a generous per-attempt window rather than a single --once.
+err=""
+for attempt in $(seq 1 6); do
+  err="$(timeout 20 ros2 topic echo /riptide/control_debug --field ee_pose_error --once 2>/dev/null \
+          | grep -oE "array\('d', \[[^]]*\]")"
+  [ -n "$err" ] && break
+  echo "smoke: control_debug not received yet (attempt ${attempt}/6); topics present:"
+  timeout 10 ros2 topic list 2>/dev/null | grep -E 'control_debug|ee_target' || true
+  sleep 3
+done
 if [ -z "$err" ]; then
-  echo "smoke: FAIL — /riptide/control_debug did not publish"; exit 1
+  echo "smoke: FAIL — /riptide/control_debug did not publish"
+  echo "--- last 40 log lines ---"; tail -40 "$LOG"
+  exit 1
 fi
 # Parse the 6 doubles; require all finite and position-error norm < 1.0 m (held, not diverging).
 norm="$(printf '%s' "$err" | grep -oE '[-0-9.eE]+' | head -3 | awk '{s+=$1*$1} END{printf "%.6f", sqrt(s)}')"
