@@ -55,8 +55,6 @@ class RiptideControlCoreConan(ConanFile):
         self.cpp_info.libs = ["riptide_control_core"]
         self.cpp_info.set_property("cmake_file_name", "riptide_control_core")
         self.cpp_info.set_property("cmake_target_name", "riptide_control_core::riptide_control_core")
-        self.cpp_info.requires = [
-            "riptide_dynamics::riptide_dynamics",
-            "riptide_geometry::riptide_geometry",
-            "eigen::eigen",
-        ]
+        # NOTE: no explicit cpp_info.requires -- see riptide_dynamics/conanfile.py.
+        # Pinning "pkg::pkg" component refs here zeroes out the transitive
+        # riptide_dynamics LIBS in CMakeDeps, breaking the consumer link.

@@ -20,42 +20,25 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
-# ---- MuJoCo -----------------------------------------------------------------
-# Point at a MuJoCo SDK (headers + libmujoco). Override with -DMUJOCO_ROOT=... or
-# the MUJOCO_ROOT env var; defaults to the staged SDK under ~/.mujoco.
-if(NOT DEFINED MUJOCO_ROOT)
-  if(DEFINED ENV{MUJOCO_ROOT})
-    set(MUJOCO_ROOT $ENV{MUJOCO_ROOT})
-  else()
-    set(MUJOCO_ROOT "$ENV{HOME}/.mujoco/mujoco-3.10.0")
-  endif()
-endif()
-
-find_path(MUJOCO_INCLUDE_DIR mujoco/mujoco.h HINTS "${MUJOCO_ROOT}/include")
-find_library(MUJOCO_LIB mujoco HINTS "${MUJOCO_ROOT}/lib")
-if(NOT MUJOCO_INCLUDE_DIR OR NOT MUJOCO_LIB)
-  message(FATAL_ERROR
-    "MuJoCo not found under MUJOCO_ROOT='${MUJOCO_ROOT}'. "
-    "Install the SDK there or pass -DMUJOCO_ROOT=/path/to/mujoco.")
-endif()
-get_filename_component(MUJOCO_LIB_DIR "${MUJOCO_LIB}" DIRECTORY)
-message(STATUS "MuJoCo: ${MUJOCO_LIB} (include: ${MUJOCO_INCLUDE_DIR})")
+# ---- MuJoCo (Conan) ---------------------------------------------------------
+# Resolved from the Conan-generated mujoco-config.cmake, discovered through the
+# CMakeDeps output dir appended to CMAKE_PREFIX_PATH by the colcon build (see
+# docs/adr/0002-colcon-conan-seam.md). No MUJOCO_ROOT / ~/.mujoco staging.
+find_package(mujoco REQUIRED)
 
 # ---- SystemInterface plugin -------------------------------------------------
 add_library(riptide_mujoco SHARED src/mujoco_system.cpp)
 target_include_directories(riptide_mujoco PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  "${MUJOCO_INCLUDE_DIR}")
-target_link_libraries(riptide_mujoco "${MUJOCO_LIB}")
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(riptide_mujoco mujoco::mujoco)
 ament_target_dependencies(riptide_mujoco
   hardware_interface pluginlib rclcpp rclcpp_lifecycle
   riptide_msgs geometry_msgs nav_msgs tf2_ros)
 
-# Embed the MuJoCo lib dir so libmujoco resolves at runtime.
-set_target_properties(riptide_mujoco PROPERTIES
-  INSTALL_RPATH "${MUJOCO_LIB_DIR}"
-  BUILD_WITH_INSTALL_RPATH FALSE)
+# libmujoco resolves at runtime from the Conan cache: the install RPATH is
+# captured from mujoco::mujoco's imported location via
+# CMAKE_INSTALL_RPATH_USE_LINK_PATH=ON (set by the colcon --cmake-args).
 
 pluginlib_export_plugin_description_file(hardware_interface plugins.xml)
 

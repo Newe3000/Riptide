@@ -58,4 +58,8 @@ class RiptideDynamicsConan(ConanFile):
         self.cpp_info.libs = ["riptide_dynamics"]
         self.cpp_info.set_property("cmake_file_name", "riptide_dynamics")
         self.cpp_info.set_property("cmake_target_name", "riptide_dynamics::riptide_dynamics")
-        self.cpp_info.requires = ["eigen::eigen", "pinocchio::pinocchio"]
+        # NOTE: do NOT set cpp_info.requires here. Pinning it to "pkg::pkg" refs on
+        # dependencies that declare no components makes CMakeDeps emit this package's
+        # LIBS as EMPTY when it is consumed transitively (via riptide_control_core),
+        # so the .so never reaches the consumer's link line. Letting Conan
+        # auto-propagate all requirements keeps riptide_dynamics linkable both ways.

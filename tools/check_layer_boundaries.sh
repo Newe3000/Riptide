@@ -5,13 +5,12 @@
 # contain no ROS-framework tokens. Prints a deterministic, sorted leak list.
 #
 #   exit 0  -> every Layer-1 target is clean
-#   exit 1  -> at least one target leaks a forbidden token
-#   exit 2  -> a target that must ALREADY be clean (riptide_dynamics) leaks
+#   exit 2  -> a target that must be clean leaks a forbidden token
 #
-# Today the control-law core still lives inside riptide_control and legitimately
-# leaks rclcpp/pluginlib; that is the documented baseline (see
-# docs/adr/0001-conan-package-taxonomy.md) and is expected to clear after the
-# Step 5 de-ROS refactor and the Step 7 extraction.
+# As of the Step 8 seam cutover, the control-law core has been extracted into the
+# riptide_control_core Conan package and the in-tree copies under riptide_control
+# are gone; the ROS layer now consumes the cores via Conan (see
+# docs/adr/0002-colcon-conan-seam.md). All three L1 packages must be CLEAN.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -22,21 +21,6 @@ FORBIDDEN='rclcpp|rclpy|pluginlib|PLUGINLIB_EXPORT_CLASS|controller_interface|ha
 DYNAMICS=(riptide_dynamics/include riptide_dynamics/src)
 GEOMETRY=(riptide_geometry/include)
 CONTROL_CORE_PKG=(riptide_control_core/include riptide_control_core/src)
-
-# Target that becomes riptide_control_core + riptide_geometry (Step 7); still
-# inside riptide_control today.
-CONTROL_CORE=(
-  riptide_control/include/riptide_control/control_law_interface.hpp
-  riptide_control/include/riptide_control/operational_space.hpp
-  riptide_control/include/riptide_control/task_space_impedance.hpp
-  riptide_control/include/riptide_control/task_space_lqr.hpp
-  riptide_control/include/riptide_control/task_space_mpc.hpp
-  riptide_control/include/riptide_control/template_control_law.hpp
-  riptide_control/src/task_space_impedance.cpp
-  riptide_control/src/task_space_lqr.cpp
-  riptide_control/src/task_space_mpc.cpp
-  riptide_control/src/template_control_law.cpp
-)
 
 # Emit sorted "path: tok1, tok2" lines for the forbidden tokens found in $@.
 leaks() {
@@ -52,7 +36,6 @@ echo "=== Layer-1 boundary audit ==="
 dyn="$(leaks "${DYNAMICS[@]}")"
 geom="$(leaks "${GEOMETRY[@]}")"
 corepkg="$(leaks "${CONTROL_CORE_PKG[@]}")"
-core="$(leaks "${CONTROL_CORE[@]}")"
 
 rc=0
 report_clean() {  # $1=label  $2=leaks -> fail (rc=2) if any
@@ -64,10 +47,5 @@ report_clean "riptide_geometry" "$geom"
 report_clean "riptide_control_core" "$corepkg"
 
 echo
-echo "[riptide_control's in-tree control-law copies]  (pluginlib leaks expected until Step 8 cutover)"
-if [ -z "$core" ]; then echo "  CLEAN"; else echo "$core" | sed 's/^/  leak  /'; fi
-
-echo
-echo "RESULT: extracted L1 packages $([ -z "$dyn$geom$corepkg" ] && echo CLEAN || echo LEAKING); " \
-     "riptide_control in-tree copies leaking=$(printf '%s\n' "$core" | grep -c .)"
+echo "RESULT: extracted L1 packages $([ -z "$dyn$geom$corepkg" ] && echo CLEAN || echo LEAKING)"
 exit $rc

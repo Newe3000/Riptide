@@ -9,6 +9,7 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "pluginlib/class_list_macros.hpp"
+#include "riptide_control/msg_conversions.hpp"
 #include "riptide_control/rclcpp_param_source.hpp"
 #include "riptide_dynamics/pinocchio_model.hpp"
 
@@ -424,14 +425,14 @@ controller_interface::return_type EeStabilizationController::update(
 
 void EeStabilizationController::target_callback(const geometry_msgs::msg::PoseStamped & msg)
 {
-  Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
-  pose.translation() =
-    Eigen::Vector3d(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z);
-  Eigen::Quaterniond q(
+  // Validate the raw command before trusting it, then cross the seam via the
+  // POD<->msg adapter (msg_conversions.hpp).
+  const Eigen::Vector3d p(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z);
+  const Eigen::Quaterniond q(
     msg.pose.orientation.w, msg.pose.orientation.x,
     msg.pose.orientation.y, msg.pose.orientation.z);
-  if (!pose.translation().allFinite() || q.norm() < 1e-6) { return; }  // ignore junk
-  pose.linear() = q.normalized().toRotationMatrix();
+  if (!p.allFinite() || q.norm() < 1e-6) { return; }  // ignore junk
+  const Eigen::Isometry3d pose = pose_from_msg(msg.pose);
   {
     std::lock_guard<std::mutex> lock(target_cmd_mutex_);
     target_cmd_pose_ = pose;
@@ -445,15 +446,7 @@ void EeStabilizationController::publish_current_target()
   geometry_msgs::msg::PoseStamped msg;
   msg.header.stamp = get_node()->now();
   msg.header.frame_id = "world";
-  const Eigen::Vector3d p = target_.pose.translation();
-  const Eigen::Quaterniond q(target_.pose.rotation());
-  msg.pose.position.x = p.x();
-  msg.pose.position.y = p.y();
-  msg.pose.position.z = p.z();
-  msg.pose.orientation.w = q.w();
-  msg.pose.orientation.x = q.x();
-  msg.pose.orientation.y = q.y();
-  msg.pose.orientation.z = q.z();
+  msg.pose = pose_to_msg(target_.pose);
   target_current_pub_->publish(msg);
 }
 

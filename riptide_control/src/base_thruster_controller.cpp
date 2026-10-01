@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
+
+#include "riptide_geometry/allocation.hpp"
 
 #include "pluginlib/class_list_macros.hpp"
 
@@ -75,25 +78,17 @@ controller_interface::CallbackReturn BaseThrusterController::on_configure(
     return controller_interface::CallbackReturn::ERROR;
   }
 
-  // Build the allocation matrix A (6 x N): column i is the [Fx, Fy, Fz, Mx, My, Mz]
-  // rows of thruster i's unit wrench [axis; r x axis]. Then A_pinv = A^T (A A^T)^-1.
-  Eigen::MatrixXd A(6, nt);
+  // Build the 6 x N thruster allocation and its regularized pseudo-inverse in the
+  // eigen-only riptide_geometry leaf (Tikhonov reg keeps weakly-actuated DOFs
+  // well-posed). Column i is thruster i's unit wrench [axis; r x axis].
+  std::vector<Eigen::Vector3d> positions(nt), thruster_axes(nt);
   for (std::size_t i = 0; i < nt; ++i)
   {
-    const Eigen::Vector3d r(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
-    const Eigen::Vector3d a(axes[3 * i], axes[3 * i + 1], axes[3 * i + 2]);
-    const Eigen::Vector3d m = r.cross(a);   // moment per unit thrust
-    A(0, i) = a.x();   // Fx
-    A(1, i) = a.y();   // Fy
-    A(2, i) = a.z();   // Fz
-    A(3, i) = m.x();   // Mx
-    A(4, i) = m.y();   // My
-    A(5, i) = m.z();   // Mz
+    positions[i] = Eigen::Vector3d(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+    thruster_axes[i] = Eigen::Vector3d(axes[3 * i], axes[3 * i + 1], axes[3 * i + 2]);
   }
-  const Eigen::MatrixXd AAt = A * A.transpose();   // 6 x 6
-  // Small Tikhonov term keeps the inverse well-posed if a DOF is weakly actuated.
-  const Eigen::MatrixXd reg = 1e-6 * Eigen::MatrixXd::Identity(6, 6);
-  alloc_pinv_ = A.transpose() * (AAt + reg).inverse();   // N x 6
+  const Eigen::MatrixXd A = riptide_geometry::allocation_matrix(positions, thruster_axes);
+  alloc_pinv_ = riptide_geometry::regularized_pinv(A);   // N x 6, reg = 1e-6
 
   RCLCPP_INFO(node->get_logger(),
     "BaseThrusterController configured: %zu thrusters, sensor '%s'.",
