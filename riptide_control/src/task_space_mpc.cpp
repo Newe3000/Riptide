@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 #include "pluginlib/class_list_macros.hpp"
@@ -12,16 +13,10 @@ namespace riptide_control
 {
 namespace
 {
-using ParamsIface = rclcpp::node_interfaces::NodeParametersInterface;
-
 template <typename T>
-T get_or_declare(const ParamsIface::SharedPtr & params, const std::string & name, const T & def)
+T get_or_declare(riptide::ParamSource & params, const std::string & name, const T & def)
 {
-  if (!params->has_parameter(name))
-  {
-    params->declare_parameter(name, rclcpp::ParameterValue(def));
-  }
-  return params->get_parameter(name).get_value<T>();
+  return params.declare(name, def);
 }
 
 Eigen::VectorXd to_vec(const std::vector<double> & v)
@@ -50,8 +45,8 @@ Eigen::Matrix2d dare(const Eigen::Matrix2d & A, const Eigen::Vector2d & B,
 }  // namespace
 
 bool TaskSpaceMpc::on_configure(
-  const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-  const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
+  riptide::ParamSource & params,
+  const riptide::Logger & log,
   std::shared_ptr<riptide::IDynamicsModel> model)
 {
   model_ = std::move(model);
@@ -139,9 +134,14 @@ bool TaskSpaceMpc::on_configure(
   max_effort_ = to_vec(get_or_declare<std::vector<double>>(
     params, "mpc.max_effort", {87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0}));
 
-  RCLCPP_INFO(logging->get_logger(),
-    "TaskSpaceMpc configured: horizon N=%d, T=%.4f s, %d QP iters/axis, "
-    "input bounds |w|<=[%.0f pos, %.0f ori].", N_, T_, max_iter_, wm[0], wm[3]);
+  if (log)
+  {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf),
+      "TaskSpaceMpc configured: horizon N=%d, T=%.4f s, %d QP iters/axis, "
+      "input bounds |w|<=[%.0f pos, %.0f ori].", N_, T_, max_iter_, wm[0], wm[3]);
+    log(buf);
+  }
   return true;
 }
 

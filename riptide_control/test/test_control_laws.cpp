@@ -17,6 +17,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
+#include "riptide_control/rclcpp_param_source.hpp"
 #include "riptide_control/task_space_impedance.hpp"
 #include "riptide_control/task_space_lqr.hpp"
 #include "riptide_control/task_space_mpc.hpp"
@@ -95,9 +96,9 @@ protected:
   }
   bool configure(riptide::IControlLaw & law)
   {
-    return law.on_configure(
-      node_->get_node_parameters_interface(),
-      node_->get_node_logging_interface(), model_);
+    riptide_control::RclcppParamSource params(node_->get_node_parameters_interface());
+    const riptide::Logger log = [](const std::string &) {};  // silent in tests
+    return law.on_configure(params, log, model_);
   }
   rclcpp::Node::SharedPtr node_;
   std::shared_ptr<MockModel> model_;

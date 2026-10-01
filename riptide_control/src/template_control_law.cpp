@@ -9,14 +9,11 @@ namespace riptide_control
 {
 namespace
 {
-using ParamsIface = rclcpp::node_interfaces::NodeParametersInterface;
-
 // Declare-on-first-use parameter helper (same pattern as the other laws).
 template <typename T>
-T get_or_declare(const ParamsIface::SharedPtr & params, const std::string & name, const T & def)
+T get_or_declare(riptide::ParamSource & params, const std::string & name, const T & def)
 {
-  if (!params->has_parameter(name)) { params->declare_parameter(name, rclcpp::ParameterValue(def)); }
-  return params->get_parameter(name).get_value<T>();
+  return params.declare(name, def);
 }
 
 Eigen::VectorXd to_vec(const std::vector<double> & v)
@@ -29,8 +26,8 @@ Eigen::VectorXd to_vec(const std::vector<double> & v)
 // controller (re)configure. Parameters live under the "template." namespace in
 // riptide_controllers.yaml (or wherever the host controller reads params from).
 bool TemplateControlLaw::on_configure(
-  const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-  const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
+  riptide::ParamSource & params,
+  const riptide::Logger & log,
   std::shared_ptr<riptide::IDynamicsModel> model)
 {
   model_ = std::move(model);
@@ -50,7 +47,7 @@ bool TemplateControlLaw::on_configure(
   max_effort_ = to_vec(get_or_declare<std::vector<double>>(
     params, "template.max_effort", {87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0}));
 
-  RCLCPP_INFO(logging->get_logger(), "TemplateControlLaw configured.");
+  if (log) { log("TemplateControlLaw configured."); }
   return true;
 }
 

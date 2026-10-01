@@ -9,16 +9,10 @@ namespace riptide_control
 {
 namespace
 {
-using ParamsIface = rclcpp::node_interfaces::NodeParametersInterface;
-
 template <typename T>
-T get_or_declare(const ParamsIface::SharedPtr & params, const std::string & name, const T & def)
+T get_or_declare(riptide::ParamSource & params, const std::string & name, const T & def)
 {
-  if (!params->has_parameter(name))
-  {
-    params->declare_parameter(name, rclcpp::ParameterValue(def));
-  }
-  return params->get_parameter(name).get_value<T>();
+  return params.declare(name, def);
 }
 
 Eigen::VectorXd to_vec(const std::vector<double> & v)
@@ -28,8 +22,8 @@ Eigen::VectorXd to_vec(const std::vector<double> & v)
 }  // namespace
 
 bool TaskSpaceImpedance::on_configure(
-  const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-  const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & /*logging*/,
+  riptide::ParamSource & params,
+  const riptide::Logger & /*log*/,
   std::shared_ptr<riptide::IDynamicsModel> model)
 {
   model_ = std::move(model);

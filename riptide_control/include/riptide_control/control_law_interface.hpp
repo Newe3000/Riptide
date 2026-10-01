@@ -3,30 +3,29 @@
 #include <memory>
 
 #include <Eigen/Dense>
-#include <rclcpp/node_interfaces/node_logging_interface.hpp>
-#include <rclcpp/node_interfaces/node_parameters_interface.hpp>
 
+#include "riptide_control/param_source.hpp"
 #include "riptide_dynamics/dynamics_model_interface.hpp"
 #include "riptide_dynamics/robot_state.hpp"
 
 namespace riptide
 {
 
-/// Strategy interface for a control approach. Implementations (PidControlLaw,
-/// ImpedanceControlLaw, LqrControlLaw, MpcControlLaw) are pluginlib plugins
-/// hosted by the single EeStabilizationController. compute() is a pure
-/// RobotState -> torque mapping with no ros2_control/MuJoCo dependency, so each
-/// law is unit-testable in isolation and hot-swappable at runtime.
+/// Strategy interface for a control approach (impedance, LQR, MPC, ...). compute()
+/// is a pure RobotState -> torque mapping with no ros2_control/MuJoCo dependency,
+/// so each law is unit-testable in isolation and hot-swappable at runtime. The
+/// interface depends only on Eigen + riptide_dynamics + the ParamSource/Logger
+/// abstractions, keeping it framework-neutral.
 class IControlLaw
 {
 public:
   virtual ~IControlLaw() = default;
 
-  /// One-time setup: read parameters (host-agnostic: works for both
-  /// rclcpp::Node and LifecycleNode via their interfaces), capture the model.
+  /// One-time setup: read parameters (declare-with-default via ParamSource),
+  /// optionally log a summary, and capture the dynamics model.
   virtual bool on_configure(
-    const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
+    ParamSource & params,
+    const Logger & log,
     std::shared_ptr<IDynamicsModel> model) = 0;
 
   /// Real-time safe: no heap allocation, no logging, no locks. Returns the

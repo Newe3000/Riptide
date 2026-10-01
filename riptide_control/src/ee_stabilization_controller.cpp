@@ -9,6 +9,7 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "pluginlib/class_list_macros.hpp"
+#include "riptide_control/rclcpp_param_source.hpp"
 #include "riptide_dynamics/pinocchio_model.hpp"
 
 namespace riptide_control
@@ -147,8 +148,13 @@ controller_interface::CallbackReturn EeStabilizationController::on_configure(
     RCLCPP_ERROR(node->get_logger(), "Failed to load control law '%s': %s", law.c_str(), e.what());
     return controller_interface::CallbackReturn::ERROR;
   }
-  if (!control_law_->on_configure(
-        node->get_node_parameters_interface(), node->get_node_logging_interface(), model_))
+  // Adapt ros2 parameters + logging to the control law's framework-neutral
+  // ParamSource / Logger (preserving declare-with-default + override semantics).
+  RclcppParamSource param_src(node->get_node_parameters_interface());
+  const auto law_logger = node->get_logger();
+  const riptide::Logger law_log =
+    [law_logger](const std::string & msg) { RCLCPP_INFO(law_logger, "%s", msg.c_str()); };
+  if (!control_law_->on_configure(param_src, law_log, model_))
   {
     RCLCPP_ERROR(node->get_logger(), "Control law on_configure failed.");
     return controller_interface::CallbackReturn::ERROR;

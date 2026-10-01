@@ -27,8 +27,8 @@ class TaskSpaceLqr : public riptide::IControlLaw
 {
 public:
   bool on_configure(
-    const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
+    riptide::ParamSource & params,
+    const riptide::Logger & log,
     std::shared_ptr<riptide::IDynamicsModel> model) override;
   Eigen::VectorXd compute(
     const riptide::RobotState & state,

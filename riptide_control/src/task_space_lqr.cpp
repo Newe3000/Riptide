@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 #include "pluginlib/class_list_macros.hpp"
@@ -12,16 +13,10 @@ namespace riptide_control
 {
 namespace
 {
-using ParamsIface = rclcpp::node_interfaces::NodeParametersInterface;
-
 template <typename T>
-T get_or_declare(const ParamsIface::SharedPtr & params, const std::string & name, const T & def)
+T get_or_declare(riptide::ParamSource & params, const std::string & name, const T & def)
 {
-  if (!params->has_parameter(name))
-  {
-    params->declare_parameter(name, rclcpp::ParameterValue(def));
-  }
-  return params->get_parameter(name).get_value<T>();
+  return params.declare(name, def);
 }
 
 Eigen::VectorXd to_vec(const std::vector<double> & v)
@@ -41,8 +36,8 @@ void lqr_gains_axis(double q_p, double q_v, double r, double & kp, double & kd)
 }  // namespace
 
 bool TaskSpaceLqr::on_configure(
-  const rclcpp::node_interfaces::NodeParametersInterface::SharedPtr & params,
-  const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr & logging,
+  riptide::ParamSource & params,
+  const riptide::Logger & log,
   std::shared_ptr<riptide::IDynamicsModel> model)
 {
   model_ = std::move(model);
@@ -75,11 +70,16 @@ bool TaskSpaceLqr::on_configure(
   max_effort_ = to_vec(get_or_declare<std::vector<double>>(
     params, "lqr.max_effort", {87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0}));
 
-  RCLCPP_INFO(logging->get_logger(),
-    "TaskSpaceLqr configured: optimal task gains "
-    "Kp=[%.1f %.1f %.1f | %.1f %.1f %.1f], Kd=[%.1f %.1f %.1f | %.1f %.1f %.1f].",
-    kp_[0], kp_[1], kp_[2], kp_[3], kp_[4], kp_[5],
-    kd_[0], kd_[1], kd_[2], kd_[3], kd_[4], kd_[5]);
+  if (log)
+  {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf),
+      "TaskSpaceLqr configured: optimal task gains "
+      "Kp=[%.1f %.1f %.1f | %.1f %.1f %.1f], Kd=[%.1f %.1f %.1f | %.1f %.1f %.1f].",
+      kp_[0], kp_[1], kp_[2], kp_[3], kp_[4], kp_[5],
+      kd_[0], kd_[1], kd_[2], kd_[3], kd_[4], kd_[5]);
+    log(buf);
+  }
   return true;
 }
 
