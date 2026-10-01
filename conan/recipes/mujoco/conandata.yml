@@ -1,0 +1,4 @@
+sources:
+  "3.10.0":
+    url: "https://github.com/google-deepmind/mujoco/releases/download/3.10.0/mujoco-3.10.0-linux-x86_64.tar.gz"
+    sha256: "4b9ba10f1b43fe77768c2354a9789e863972715ceed009e508c55195b35a83c6"

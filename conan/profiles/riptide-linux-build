@@ -1,0 +1,3 @@
+# Riptide build profile (two-profile mode) -- native build matching the host ABI.
+# Used for tool_requires (cmake, etc.). Identical settings to the host profile.
+include(riptide-linux-release)

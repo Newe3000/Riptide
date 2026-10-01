@@ -1,0 +1,22 @@
+# Riptide host profile -- frozen to the apt ROS 2 Jazzy toolchain on this box so
+# Conan-built .so's are ABI-compatible with the apt ros2_control binaries they are
+# dlopen'd beside in one controller_manager process.
+#
+# Derived from the actual box (Step 02):
+#   Ubuntu 24.04.5, x86_64
+#   gcc 13.3.0                       -> compiler.version=13
+#   /opt/ros/jazzy/lib/librclcpp.so uses std::__cxx11 symbols (nm -DC | grep __cxx11
+#     = 315 hits)                    -> _GLIBCXX_USE_CXX11_ABI=1 -> compiler.libcxx=libstdc++11
+#   C++17, GNU extensions (ament default gnu++17) -> compiler.cppstd=gnu17
+#
+# Do NOT add -march=native / -mavx: that raises Eigen's EIGEN_MAX_ALIGN_BYTES and
+# would corrupt Eigen objects passed across the Conan<->apt .so boundary. Keep the
+# generic x86_64 alignment (16 bytes) uniform across every TU.
+[settings]
+os=Linux
+arch=x86_64
+compiler=gcc
+compiler.version=13
+compiler.libcxx=libstdc++11
+compiler.cppstd=gnu17
+build_type=Release

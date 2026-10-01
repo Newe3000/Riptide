@@ -376,4 +376,8 @@ flowchart LR
   or `rclpy` is ROS glue and stays in ROS packages that *consume* the Conan
   libraries.
 
-See `docs/plan/` for the step-by-step roadmap to a multi-Conan-package project.
+The target Conan package graph, the downward-only layer invariant, and the
+verified boundary-violation baseline are frozen in
+[`docs/adr/0001-conan-package-taxonomy.md`](adr/0001-conan-package-taxonomy.md)
+and enforced by `tools/check_layer_boundaries.sh`. See `docs/plan/` for the
+step-by-step roadmap to a multi-Conan-package project.

@@ -3,6 +3,17 @@ build/
 install/
 log/
 
+# conan (client outputs; profiles + checks under conan/ are committed)
+CMakeUserPresets.json
+conan/checks/*/build/
+conan/checks/*/CMakeUserPresets.json
+# conan install/build generator scripts (from `conan install --requires=...`)
+conanbuild*.sh
+conanrun*.sh
+conanbuildenv-*.sh
+conanrunenv-*.sh
+deactivate_conan*.sh
+
 # python
 __pycache__/
 *.pyc

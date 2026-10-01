@@ -77,6 +77,8 @@ if(BUILD_TESTING)
   if(TARGET test_control_laws)
     target_link_libraries(test_control_laws riptide_control Eigen3::Eigen)
     ament_target_dependencies(test_control_laws rclcpp riptide_dynamics ament_index_cpp)
+    target_compile_definitions(test_control_laws PRIVATE
+      RIPTIDE_GOLDEN_FILE="${CMAKE_CURRENT_SOURCE_DIR}/test/golden/control_law_torques.csv")
     set_target_properties(test_control_laws PROPERTIES
       BUILD_RPATH "${PINOCCHIO_ROOT}/lib")
   endif()

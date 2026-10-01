@@ -3,8 +3,12 @@
 // assert structural + directional properties (size, finiteness, equilibrium,
 // error-direction) without needing MuJoCo or a real robot.
 
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <map>
 #include <memory>
-
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -16,6 +20,7 @@
 #include "riptide_control/task_space_impedance.hpp"
 #include "riptide_control/task_space_lqr.hpp"
 #include "riptide_control/task_space_mpc.hpp"
+#include "riptide_control/template_control_law.hpp"
 #include "riptide_dynamics/dynamics_model_interface.hpp"
 #include "riptide_dynamics/pinocchio_model.hpp"
 
@@ -275,6 +280,86 @@ TEST_F(HydroTest, DragIsDissipativeGatedAndQuadratic)
   s.dq = Eigen::VectorXd::Constant(kN, 1.0);
   on.update(s);
   EXPECT_GT(on.hydroForces(s).norm(), 2.0 * n1);
+}
+
+// ---- golden baseline -------------------------------------------------------
+// For a fixed RobotState + EndEffectorTarget and default gains, record the exact
+// compute() torque vector of each law in a checked-in fixture. The Step 5 de-ROS
+// refactor changes the IControlLaw API but not the math, so these must reproduce.
+// Regenerate with RIPTIDE_GOLDEN_REGEN=1 (or when the fixture is absent).
+
+TEST_F(ControlLawTest, GoldenComputeBaseline)
+{
+  const auto state = rest_state();
+  const auto target = target_at(Eigen::Vector3d(0.5, 0.1, 1.05));
+  const double dt = 0.004;
+
+  std::map<std::string, Eigen::VectorXd> got;
+  {
+    riptide_control::TaskSpaceImpedance law;
+    ASSERT_TRUE(configure(law));
+    got["impedance"] = law.compute(state, target, dt);
+  }
+  {
+    riptide_control::TaskSpaceLqr law;
+    ASSERT_TRUE(configure(law));
+    got["lqr"] = law.compute(state, target, dt);
+  }
+  {
+    riptide_control::TaskSpaceMpc law;
+    ASSERT_TRUE(configure(law));
+    law.reset();
+    got["mpc"] = law.compute(state, target, dt);
+  }
+  {
+    riptide_control::TemplateControlLaw law;
+    ASSERT_TRUE(configure(law));
+    got["template"] = law.compute(state, target, dt);
+  }
+
+#ifndef RIPTIDE_GOLDEN_FILE
+  GTEST_SKIP() << "RIPTIDE_GOLDEN_FILE not defined by the build";
+#else
+  const std::string path = RIPTIDE_GOLDEN_FILE;
+  std::ifstream in(path);
+  if (std::getenv("RIPTIDE_GOLDEN_REGEN") != nullptr || !in.good()) {
+    std::ofstream out(path);
+    ASSERT_TRUE(out.good()) << "cannot write golden fixture: " << path;
+    out << "# law,tau0..tau6 -- fixed q_rest, target (0.5,0.1,1.05), dt=0.004, "
+           "default gains, MockModel (M=I, nle=0, J=[I6|0]).\n";
+    out << std::setprecision(17);
+    for (const auto & [name, tau] : got) {
+      out << name;
+      for (int i = 0; i < tau.size(); ++i) { out << "," << tau[i]; }
+      out << "\n";
+    }
+    SUCCEED() << "regenerated golden fixture: " << path;
+    return;
+  }
+
+  std::map<std::string, Eigen::VectorXd> expected;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty() || line[0] == '#') { continue; }
+    std::stringstream ss(line);
+    std::string name, cell;
+    std::getline(ss, name, ',');
+    std::vector<double> v;
+    while (std::getline(ss, cell, ',')) { v.push_back(std::stod(cell)); }
+    Eigen::VectorXd e(static_cast<Eigen::Index>(v.size()));
+    for (std::size_t i = 0; i < v.size(); ++i) { e[static_cast<Eigen::Index>(i)] = v[i]; }
+    expected[name] = e;
+  }
+
+  const double tol = 1e-9;  // same binary is bit-identical; tol absorbs rebuilds
+  for (const auto & [name, tau] : got) {
+    ASSERT_TRUE(expected.count(name)) << "golden fixture missing law: " << name;
+    ASSERT_EQ(expected[name].size(), tau.size()) << name;
+    for (int i = 0; i < tau.size(); ++i) {
+      EXPECT_NEAR(tau[i], expected[name][i], tol) << name << " tau[" << i << "]";
+    }
+  }
+#endif
 }
 
 }  // namespace
