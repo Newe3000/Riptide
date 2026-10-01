@@ -111,7 +111,8 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential git python3-pip python3-colcon-common-extensions \
-            ros-jazzy-ros2-control ros-jazzy-ros2-controllers
+            ros-jazzy-ros2-control ros-jazzy-ros2-controllers \
+            ros-jazzy-xacro ros-jazzy-robot-state-publisher ros-jazzy-tf2-ros
           pip3 install --break-system-packages "conan>=2.3,<3"
       - name: Restore the Conan cache from Job A
         uses: actions/cache@v4
